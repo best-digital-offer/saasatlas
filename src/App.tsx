@@ -197,16 +197,17 @@ function App() {
           <section className="leaderboard-layout" aria-label="SaaS leaderboard">
             <div className="results-column">
               <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
-              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span>Rank movement</span></div>
+              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span>Rank movement</span><span>Action</span></div>
               {products.length ? products.map((product) => {
                 const rank = rankById.get(product.id) ?? null
-                return <button className="product-row" key={product.id} onClick={() => setSelected(product)} aria-label={`View ${product.name}, rank ${rank}`}>
+                return <div className="product-row" key={product.id}>
                   <span className="rank-number">{rank ? String(rank).padStart(2, '0') : '—'}</span>
-                  <span className="product-identity"><Logo product={product} /><span className="product-copy"><strong>{product.name}</strong><small>{product.tagline}</small></span></span>
+                  <button className="product-identity" onClick={() => setSelected(product)} aria-label={`View ${product.name}, rank ${rank}`}><Logo product={product} /><span className="product-copy"><strong>{product.name}</strong><small>{product.tagline}</small></span></button>
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   <span className={`movement ${product.movement > 0 ? 'up' : product.movement < 0 ? 'down' : 'steady'}`}>{product.movement > 0 ? <ArrowUpRight size={15} /> : product.movement < 0 ? <ArrowDownRight size={15} /> : <span className="movement-dash">—</span>}{product.movement ? <span>{Math.abs(product.movement)}</span> : null}</span>
-                </button>
+                  <button className="product-boost" onClick={() => { setRankTarget(Math.min(10, Math.max(1, rank ?? 1))); setRankGuideOpen(true) }} aria-label={`Boost your listing toward rank ${Math.min(10, Math.max(1, rank ?? 1))}`}><ArrowUpRight size={14} /> Boost</button>
+                </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
                 <strong>{dataState === 'live' && liveProducts.length === 0 ? 'The leaderboard starts here' : 'No products found'}</strong>

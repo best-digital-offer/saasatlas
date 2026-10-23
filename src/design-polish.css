@@ -42,7 +42,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .category-tabs button.selected { background: #eaf3db; border-color: #eaf3db; color: #263f2e; }
 .select-wrap, .results-toolbar select { color: #4d5b53; }
 .table-head { color: #748078; border-color: #dfe6df; }
+.table-head, .product-row { grid-template-columns: 43px minmax(190px, 1.45fr) minmax(90px, .76fr) minmax(105px, .82fr) minmax(72px, .5fr) 78px; column-gap: 10px; }
 .product-row { border-color: #e7ebe7; }
+.product-identity { width: 100%; min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; }
+.product-identity:hover .product-copy strong { color: #245d43; }
+.product-boost { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 9px; border: 1px solid #d8e5d7; border-radius: 7px; color: #315a3e; background: #f6faf3; font-size: 11px; font-weight: 650; white-space: nowrap; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
+.product-boost:hover { background: #eaf3e4; border-color: #b8ceb8; transform: translateY(-1px); }
 .product-row:hover { background: #fafcf9; }
 .rank-number, .bid-value { color: #314239; }
 .product-copy small { color: #7a867e; }
@@ -128,6 +133,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .page-heading h1 { letter-spacing: -1.9px; }
   .page-heading p { color: #6e7a73; }
   .page-heading .ranking-note { display: grid; width: 100%; min-width: 0; margin-top: 15px; padding: 11px 13px; }
+  .table-head, .product-row { grid-template-columns: 28px minmax(125px, 1fr) minmax(64px, .52fr) minmax(62px, .48fr) 58px; column-gap: 6px; }
+  .table-head span:nth-child(5), .product-row > .movement { display: none; }
+  .table-head span:nth-child(6) { text-align: center; }
+  .product-boost { min-height: 27px; padding: 0 5px; gap: 2px; font-size: 9px; }
+  .product-boost svg { width: 11px; height: 11px; }
   .preview-notice { border-radius: 8px; }
   .category-tabs button.selected { background: #eaf3db; }
   .product-row:active, .top-ten-row:active { background: #f1f7e7; }
