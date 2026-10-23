@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
-  CircleHelp, Compass, ExternalLink, Menu, Plus, Search, Sparkles,
+  Compass, ExternalLink, Menu, Plus, Search, Sparkles,
   Trophy, X, Zap, LoaderCircle,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
