@@ -11,7 +11,8 @@ where p.state = 'approved' and p.participates and a.email_verified_at is not nul
   and public.subscription_is_eligible(a.subscription_status, a.subscription_valid_until, a.grace_period_ends_at);
 revoke all on private.public_leaderboard_source from public, anon, authenticated;
 grant select on private.public_leaderboard_source to anon, authenticated;
-create or replace view public.public_leaderboard with (security_invoker = true) as
+drop view if exists public.public_leaderboard;
+create view public.public_leaderboard with (security_invoker = true) as
 select id, slug, name, tagline, category, website_url, standing_bid, current_rank, previous_rank, rank_changed_at, accepted_at, logo_url
 from private.public_leaderboard_source;
 commit;
