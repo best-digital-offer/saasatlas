@@ -26,6 +26,10 @@ type Product = {
   pricingModel?: string | null
   pricingUrl?: string | null
   pricingVerifiedAt?: string | null
+  logoUrl?: string | null
+  descriptionSourceUrl?: string | null
+  descriptionVerifiedAt?: string | null
+  seoPath?: string
 }
 
 const sampleProducts: Product[] = [
@@ -48,7 +52,7 @@ const sampleRankById = new Map(sampleProducts.map((product, index) => [product.i
 const tones = ['midnight', 'blue', 'ink', 'sky', 'coral', 'mint', 'lavender', 'amber', 'teal', 'rose', 'slate']
 
 function Logo({ product, small = false }: { product: Product; small?: boolean }) {
-  return <span aria-hidden="true" className={`product-mark ${product.tone} ${small ? 'small' : ''}`}>{product.symbol}</span>
+  return <span aria-hidden="true" className={`product-mark ${product.tone} ${small ? 'small' : ''}`}>{product.symbol}{product.logoUrl && <img src={product.logoUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none' }} />}</span>
 }
 
 function App() {
@@ -72,7 +76,7 @@ function App() {
     const loadLeaderboard = async () => {
       const [leaderboardResult, catalogResult] = await Promise.all([
         client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
-        client.from('published_catalog_products').select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at').order('name'),
+        client.from('published_catalog_products').select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at').order('name'),
       ])
       if (cancelled) return
       if (leaderboardResult.error || catalogResult.error) {
@@ -118,6 +122,10 @@ function App() {
         pricingModel: row.pricing_model,
         pricingUrl: row.pricing_url,
         pricingVerifiedAt: row.pricing_verified_at,
+        logoUrl: row.logo_path,
+        descriptionSourceUrl: row.description_source_url,
+        descriptionVerifiedAt: row.description_verified_at,
+        seoPath: `/products/${row.slug}/`,
       })))
       setDataState('live')
     }
@@ -240,7 +248,28 @@ function FounderDashboard({ onSignIn, onHow }: { onSignIn: () => void; onHow: ()
 
 function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Product; rank: number | null; onClose: () => void; onBid: () => void; preview: boolean }) {
   const websiteUrl = product.website.startsWith('https://') ? product.website : `https://${product.website}`
-  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog product-dialog" role="dialog" aria-modal="true" aria-labelledby="product-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><div className="dialog-product-head"><Logo product={product} /><div><span className="sample-kicker">{preview ? 'Illustrative preview listing' : product.isCatalog ? 'Sourced directory listing' : 'Founder leaderboard listing'}</span><h2 id="product-dialog-title">{product.name}</h2><span>{product.category}</span></div></div><p className="dialog-tagline">{product.tagline}</p><div className="detail-stats"><div><span>Current position</span><strong>{rank ? `#${String(rank).padStart(2, '0')}` : '—'}</strong></div><div><span>{product.isCatalog ? 'Pricing model' : 'Standing bid'}</span><strong>{product.isCatalog ? product.pricingModel ?? 'Not listed' : product.credits > 0 ? product.credits : '—'} <small>{!product.isCatalog && product.credits > 0 ? 'credits' : ''}</small></strong></div><div><span>Movement</span><strong className={product.movement > 0 ? 'text-green' : product.movement < 0 ? 'text-red' : ''}>{product.movement > 0 ? `↑ ${product.movement}` : product.movement < 0 ? `↓ ${Math.abs(product.movement)}` : '—'}</strong></div></div><p className="detail-disclaimer">{product.isCatalog ? <>Sourced from <a href={product.sourceUrl} target="_blank" rel="noreferrer">{product.sourceProvider}</a>. {product.attributionText} Verified {product.verifiedAt ? new Date(product.verifiedAt).toLocaleDateString() : 'date unavailable'}.{product.pricingUrl && <> Pricing details: <a href={product.pricingUrl} target="_blank" rel="noreferrer">official pricing page</a>{product.pricingVerifiedAt ? ` (checked ${new Date(product.pricingVerifiedAt).toLocaleDateString()})` : ''}.</>}</> : preview ? 'This listing and its bid are sample data for the interface preview. No live bidding is taking place.' : 'Ranks reflect current eligible standing bids. A bid reservation remains active until changed or withdrawn.'}</p><div className="dialog-actions"><a className="button button-light" href={websiteUrl} target={preview ? undefined : '_blank'} rel="noreferrer" onClick={preview ? (event) => event.preventDefault() : undefined}>Visit website <ExternalLink size={14} /></a>{!product.isCatalog && <button className="button button-primary" onClick={onBid}>Back this product <ArrowRight size={14} /></button>}</div></section></div>
+  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="dialog product-dialog" role="dialog" aria-modal="true" aria-labelledby="product-dialog-title">
+      <button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+      <div className="dialog-product-head"><Logo product={product} /><div><span className="sample-kicker">{preview ? 'Illustrative preview listing' : product.isCatalog ? 'Sourced directory listing' : 'Founder leaderboard listing'}</span><h2 id="product-dialog-title">{product.name}</h2><span>{product.category}</span></div></div>
+      <p className="dialog-tagline">{product.tagline}</p>
+      <div className="detail-stats">
+        <div><span>Current position</span><strong>{rank ? `#${String(rank).padStart(2, '0')}` : '—'}</strong></div>
+        <div><span>{product.isCatalog ? 'Pricing model' : 'Standing bid'}</span><strong>{product.isCatalog ? product.pricingModel ?? 'Not listed' : product.credits > 0 ? product.credits : '—'} <small>{!product.isCatalog && product.credits > 0 ? 'credits' : ''}</small></strong></div>
+        <div><span>Movement</span><strong className={product.movement > 0 ? 'text-green' : product.movement < 0 ? 'text-red' : ''}>{product.movement > 0 ? `↑ ${product.movement}` : product.movement < 0 ? `↓ ${Math.abs(product.movement)}` : '—'}</strong></div>
+      </div>
+      <p className="detail-disclaimer">{product.isCatalog ? <>
+        {product.descriptionSourceUrl ? <>Description checked against the <a href={product.descriptionSourceUrl} target="_blank" rel="noreferrer">official product page</a>{product.descriptionVerifiedAt ? ` on ${new Date(product.descriptionVerifiedAt).toLocaleDateString()}` : ''}. </> : <>Description provided by ComparEdge under CC BY 4.0. </>}
+        Sourced from <a href={product.sourceUrl} target="_blank" rel="noreferrer">{product.sourceProvider}</a>. {product.attributionText} Verified {product.verifiedAt ? new Date(product.verifiedAt).toLocaleDateString() : 'date unavailable'}.
+        {product.pricingUrl && <> Pricing details: <a href={product.pricingUrl} target="_blank" rel="noreferrer">official pricing page</a>{product.pricingVerifiedAt ? ` (checked ${new Date(product.pricingVerifiedAt).toLocaleDateString()})` : ''}.</>}
+      </> : preview ? 'This listing and its bid are sample data for the interface preview. No live bidding is taking place.' : 'Ranks reflect current eligible standing bids. A bid reservation remains active until changed or withdrawn.'}</p>
+      <div className="dialog-actions">
+        {product.isCatalog && product.seoPath && <a className="button button-light" href={product.seoPath}>Product profile <ExternalLink size={14} /></a>}
+        <a className="button button-light" href={websiteUrl} target={preview ? undefined : '_blank'} rel="noreferrer" onClick={preview ? (event) => event.preventDefault() : undefined}>Visit website <ExternalLink size={14} /></a>
+        {!product.isCatalog && <button className="button button-primary" onClick={onBid}>Back this product <ArrowRight size={14} /></button>}
+      </div>
+    </section>
+  </div>
 }
 
 function InfoDialog({ type, onClose, onSignIn }: { type: 'how' | 'submit' | 'signin'; onClose: () => void; onSignIn: () => void }) {

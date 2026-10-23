@@ -34,4 +34,9 @@ export type PublicCatalogProductRecord = {
   source_url: string
   attribution_text: string
   verified_at: string
+  logo_path: string | null
+  logo_source_url: string | null
+  logo_verified_at: string | null
+  description_source_url: string | null
+  description_verified_at: string | null
 }

@@ -1,0 +1,3 @@
+.product-mark{position:relative;overflow:hidden}
+.product-mark img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:6px;border-radius:inherit;background:#fff}
+.product-mark.small img{padding:3px}

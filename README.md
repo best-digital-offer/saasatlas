@@ -43,6 +43,10 @@ The importer sends batches of at most 50 through `ingest_catalog_batch`, protect
 
 The manifest in `data/catalog-import-2026-10-23.json` records the source, attribution, checked product URLs and timestamps, selected candidates, and candidates excluded during verification. Pricing URLs were verified when available; numerical prices were intentionally left out.
 
+The published catalog also stores first-party product descriptions and logo provenance separately from the original feed attribution. Where an official product page does not expose metadata, a concise description is paraphrased from linked official documentation. Brand marks are served as local assets from `public/catalog-logos/` so public pages do not depend on third-party image hosts. The production build creates a static, canonical profile page for every catalog slug under `/products/<slug>/`, plus `sitemap.xml` and `robots.txt`; the homepage catalog links each listing to its profile. Two products without accessible official logo assets use the existing lettermark fallback.
+
+After a source metadata refresh, run `npm run build` to regenerate the SPA assets, static product pages, and sitemap. `npm run catalog:enrich` can refresh first-party descriptions and logo assets from the catalog's official URLs; review the resulting manifest before syncing it to the live database.
+
 ## Commands
 
 - `npm run dev` — local development server
@@ -52,5 +56,7 @@ The manifest in `data/catalog-import-2026-10-23.json` records the source, attrib
 - `npm run catalog:prepare` — build a category-balanced source candidate manifest
 - `npm run catalog:verify` — verify product and pricing URLs and select only verified entries
 - `npm run catalog:import` — import a verified manifest in idempotent batches
+- `npm run catalog:enrich` — refresh first-party descriptions and brand assets from official sites
+- `npm run catalog:seo` — generate static product profiles, sitemap, and robots file
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md), [PRD.md](./PRD.md), and [PROJECT_STATUS.md](./PROJECT_STATUS.md) for rules and setup blockers.
