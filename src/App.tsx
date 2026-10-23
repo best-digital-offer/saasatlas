@@ -5,6 +5,9 @@ import {
   Target, Trophy, X,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
+import type { Session } from '@supabase/supabase-js'
+import AuthDialog from './AuthDialog'
+import FounderWorkspace from './FounderWorkspace'
 import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
 import { rankTargetCredits } from './lib/rank-targets'
 
@@ -71,6 +74,15 @@ function App() {
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
+  const [session, setSession] = useState<Session | null>(null)
+
+  useEffect(() => {
+    if (!supabase) return
+    let active = true
+    void supabase.auth.getSession().then(({ data }) => { if (active) setSession(data.session) })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
+    return () => { active = false; subscription.unsubscribe() }
+  }, [])
 
   useEffect(() => {
     const client = supabase
@@ -170,11 +182,11 @@ function App() {
         {page === 'discover' ? (
           <div className="header-actions">
             <label className={`searchbox ${mobileSearchOpen ? 'mobile-search-open' : ''}`} onClick={() => { if (window.innerWidth <= 700 && !mobileSearchOpen) setMobileSearchOpen(true) }}><Search size={16} /><input autoFocus={mobileSearchOpen} aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }} /><kbd>/</kbd></label>
-            <button className="text-button login-button" onClick={() => setDialog('signin')}>Log in</button>
-            <button className="button button-primary submit-button" onClick={() => setDialog('submit')}>Submit a product</button>
+            <button className="text-button login-button" onClick={() => session ? void supabase?.auth.signOut() : setDialog('signin')}>{session ? 'Sign out' : 'Log in'}</button>
+            <button className="button button-primary submit-button" onClick={() => session ? setPage('founder') : setDialog('submit')}>Submit a product</button>
           </div>
         ) : (
-          <div className="header-actions"><span className="preview-chip"><span className="status-dot" /> Preview account</span><button className="button button-dark" onClick={() => setDialog('signin')}>Sign in <ArrowRight size={15} /></button></div>
+          <div className="header-actions">{session ? <span className="preview-chip"><span className="status-dot" /> {session.user.email}</span> : <span className="preview-chip"><span className="status-dot" /> Preview account</span>}{session ? <button className="button button-dark" onClick={() => void supabase?.auth.signOut()}>Sign out</button> : <button className="button button-dark" onClick={() => setDialog('signin')}>Sign in <ArrowRight size={15} /></button>}</div>
         )}
       </header>
 
@@ -229,7 +241,7 @@ function App() {
           <footer className="site-footer"><div className="footer-brand"><span className="brand-mark"><span /><span /><span /></span> Saaslist<span>Atlas</span></div><span>Find your next favorite tool.</span><div className="footer-links"><button onClick={() => setDialog('how')}>How it works</button><button onClick={() => setDialog('submit')}>Submit a product</button></div><small>© 2026 SaaslistAtlas</small></footer>
         </main>
       ) : (
-        <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />
+        {session ? <FounderWorkspace userId={session.user.id} email={session.user.email ?? ''} onSignOut={() => { void supabase?.auth.signOut() }} onHow={() => setDialog('how')} /> : <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />}
       )}
 
       {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { setSelected(null); setRankGuideOpen(true) }} preview={dataState !== 'live'} />}
@@ -240,7 +252,7 @@ function App() {
         onClose={() => setRankGuideOpen(false)}
         onContinue={() => { setRankGuideOpen(false); setDialog('signin') }}
       />}
-      {dialog && <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} />}
+      {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
 }
