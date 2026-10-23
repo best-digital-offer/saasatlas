@@ -119,24 +119,32 @@ async function downloadLogo(product, baseUrl, iconLinks) {
 async function enrich(product) {
   try {
     const response = await fetchWithTimeout(product.canonical_url)
-    if (!response.ok) return { ...product, official_description: null, description_source_url: null, description_verified_at: null, logo_path: null, logo_source_url: null, logo_verified_at: null, enrichment_status: `homepage_http_${response.status}` }
+    if (!response.ok) return { ...product, enrichment_status: `homepage_http_${response.status}` }
     const html = await response.text()
     const { description, iconLinks } = pageMetadata(html)
     const logo = await downloadLogo(product, response.url || product.canonical_url, iconLinks)
     const checkedAt = new Date().toISOString()
+    const hasNewDescription = description.length >= 35
+    const hasDescription = hasNewDescription || Boolean(product.official_description && product.description_source_url)
+    const hasNewLogo = Boolean(logo.path)
+    const hasLogo = hasNewLogo || Boolean(product.logo_path && product.logo_source_url && product.logo_verified_at)
     return {
       ...product,
-      ...(description.length >= 35 ? { description } : {}),
-      official_description: description.length >= 35 ? description : null,
-      description_source_url: description.length >= 35 ? (response.url || product.canonical_url) : null,
-      description_verified_at: description.length >= 35 ? checkedAt : null,
-      logo_path: logo.path,
-      logo_source_url: logo.sourceUrl,
-      logo_verified_at: logo.path ? checkedAt : null,
-      enrichment_status: description.length >= 35 && logo.path ? 'description_and_logo' : description.length >= 35 ? 'description_only' : logo.path ? 'logo_only' : 'no_official_metadata',
+      ...(hasNewDescription ? {
+        description,
+        official_description: description,
+        description_source_url: response.url || product.canonical_url,
+        description_verified_at: checkedAt,
+      } : {}),
+      ...(hasNewLogo ? {
+        logo_path: logo.path,
+        logo_source_url: logo.sourceUrl,
+        logo_verified_at: checkedAt,
+      } : {}),
+      enrichment_status: hasDescription && hasLogo ? 'description_and_logo' : hasDescription ? 'description_only' : hasLogo ? 'logo_only' : 'no_official_metadata',
     }
   } catch (error) {
-    return { ...product, official_description: null, description_source_url: null, description_verified_at: null, logo_path: null, logo_source_url: null, logo_verified_at: null, enrichment_status: error?.name === 'TimeoutError' ? 'homepage_timeout' : 'homepage_unavailable' }
+    return { ...product, enrichment_status: error?.name === 'TimeoutError' ? 'homepage_timeout' : 'homepage_unavailable' }
   }
 }
 
