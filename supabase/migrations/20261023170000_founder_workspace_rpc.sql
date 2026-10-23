@@ -84,197 +84,26 @@ revoke all on function public.get_founder_workspace() from public, anon;
 grant execute on function public.get_founder_workspace() to authenticated;
 
 
--- Align listing submission with the PRD: an email-verified founder and an eligible
--- subscription are required. The check is repeated in PostgreSQL, not trusted to UI.
-create or replace function public.create_product_listing(
-  p_name text, p_tagline text, p_description text, p_category text, p_website_url text
-)
-returns uuid
+-- The original listing RPC enforces plan, eligibility, and listing-limit rules.
+-- This trigger adds a database-side email-verification requirement without duplicating
+-- the existing RPC logic or changing founder ownership.
+create or replace function public.require_verified_email_for_product()
+returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, auth
-as $
-declare
-  v_owner uuid := auth.uid();
-  v_plan public.plan_tier;
-  v_sub public.subscription_state;
-  v_verified timestamptz;
-  v_valid_until timestamptz;
-  v_grace timestamptz;
-  v_limit integer;
-  v_plan_config jsonb;
-  v_count integer;
-  v_id uuid := gen_random_uuid();
-  v_slug text;
-begin
-  if v_owner is null then
-    raise exception using errcode = '28000', message = 'Authentication required';
-  end if;
-  if p_name is null or char_length(trim(p_name)) not between 2 and 100
-     or p_tagline is null or char_length(trim(p_tagline)) not between 5 and 180 then
-    raise exception using errcode = '22023', message = 'Product name or tagline is invalid';
-  end if;
-  if p_website_url is null or p_website_url !~* '^https://[^[:space:]]+
-    raise exception using errcode = '22023', message = 'Website must use HTTPS';
-  end if;
+as 'BEGIN
+  IF auth.uid() IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.user_accounts
+    WHERE id = auth.uid() AND email_verified_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE = ''42501'', MESSAGE = ''Verify your email before submitting a listing'';
+  END IF;
+  RETURN NEW;
+END;';
 
-  perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-listings:' || v_owner::text, 0));
-  select plan, subscription_status, email_verified_at, subscription_valid_until, grace_period_ends_at
-    into v_plan, v_sub, v_verified, v_valid_until, v_grace
-    from public.user_accounts where id = v_owner for update;
-  if not found then
-    raise exception using errcode = 'P0002', message = 'Founder account is not initialized';
-  end if;
-  if v_verified is null then
-    raise exception using errcode = '42501', message = 'Verify your email before submitting a listing';
-  end if;
-  if not public.subscription_is_eligible(v_sub, v_valid_until, v_grace) then
-    raise exception using errcode = '42501', message = 'An eligible subscription is required to submit a listing';
-  end if;
-
-  select plan_catalog -> v_plan::text into v_plan_config from public.credit_rules where singleton;
-  if v_plan_config is null then
-    raise exception using errcode = 'P0002', message = 'Account plan has no configured listing rule';
-  end if;
-  v_limit := nullif(v_plan_config ->> 'listing_limit', '')::integer;
-  select count(*) into v_count from public.products
-    where owner_id = v_owner and state in ('pending', 'approved', 'paused');
-  if v_limit is not null and v_count >= v_limit then
-    raise exception using errcode = '22023', message = 'Your plan listing limit has been reached';
-  end if;
-
-  v_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'))
-    || '-' || substr(v_id::text, 1, 8);
-  insert into public.products(id, owner_id, name, slug, tagline, description, category, website_url)
-    values (v_id, v_owner, trim(p_name), v_slug, trim(p_tagline), coalesce(p_description, ''), trim(p_category), p_website_url);
-  return v_id;
-end;
-$;
-
-revoke all on function public.create_product_listing(text, text, text, text, text) from public, anon;
-grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
-
-commit;
- then
-    raise exception using errcode = '22023', message = 'Website must use HTTPS';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-listings:' || v_owner::text, 0));
-  select plan, subscription_status, email_verified_at, subscription_valid_until, grace_period_ends_at
-    into v_plan, v_sub, v_verified, v_valid_until, v_grace
-    from public.user_accounts where id = v_owner for update;
-  if not found then
-    raise exception using errcode = 'P0002', message = 'Founder account is not initialized';
-  end if;
-  if v_verified is null then
-    raise exception using errcode = '42501', message = 'Verify your email before submitting a listing';
-  end if;
-  if not public.subscription_is_eligible(v_sub, v_valid_until, v_grace) then
-    raise exception using errcode = '42501', message = 'An eligible subscription is required to submit a listing';
-  end if;
-
-  select plan_catalog -> v_plan::text into v_plan_config from public.credit_rules where singleton;
-  if v_plan_config is null then
-    raise exception using errcode = 'P0002', message = 'Account plan has no configured listing rule';
-  end if;
-  v_limit := nullif(v_plan_config ->> 'listing_limit', '')::integer;
-  select count(*) into v_count from public.products
-    where owner_id = v_owner and state in ('pending', 'approved', 'paused');
-  if v_limit is not null and v_count >= v_limit then
-    raise exception using errcode = '22023', message = 'Your plan listing limit has been reached';
-  end if;
-
-  v_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'))
-    || '-' || substr(v_id::text, 1, 8);
-  insert into public.products(id, owner_id, name, slug, tagline, description, category, website_url)
-    values (v_id, v_owner, trim(p_name), v_slug, trim(p_tagline), coalesce(p_description, ''), trim(p_category), p_website_url);
-  return v_id;
-end;
-$;
-
-revoke all on function public.create_product_listing(text, text, text, text, text) from public, anon;
-grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
-
-commit;
-
-    raise exception using errcode = '22023', message = 'Website must use HTTPS';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-listings:' || v_owner::text, 0));
-  select plan, subscription_status, email_verified_at, subscription_valid_until, grace_period_ends_at
-    into v_plan, v_sub, v_verified, v_valid_until, v_grace
-    from public.user_accounts where id = v_owner for update;
-  if not found then
-    raise exception using errcode = 'P0002', message = 'Founder account is not initialized';
-  end if;
-  if v_verified is null then
-    raise exception using errcode = '42501', message = 'Verify your email before submitting a listing';
-  end if;
-  if not public.subscription_is_eligible(v_sub, v_valid_until, v_grace) then
-    raise exception using errcode = '42501', message = 'An eligible subscription is required to submit a listing';
-  end if;
-
-  select plan_catalog -> v_plan::text into v_plan_config from public.credit_rules where singleton;
-  if v_plan_config is null then
-    raise exception using errcode = 'P0002', message = 'Account plan has no configured listing rule';
-  end if;
-  v_limit := nullif(v_plan_config ->> 'listing_limit', '')::integer;
-  select count(*) into v_count from public.products
-    where owner_id = v_owner and state in ('pending', 'approved', 'paused');
-  if v_limit is not null and v_count >= v_limit then
-    raise exception using errcode = '22023', message = 'Your plan listing limit has been reached';
-  end if;
-
-  v_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'))
-    || '-' || substr(v_id::text, 1, 8);
-  insert into public.products(id, owner_id, name, slug, tagline, description, category, website_url)
-    values (v_id, v_owner, trim(p_name), v_slug, trim(p_tagline), coalesce(p_description, ''), trim(p_category), p_website_url);
-  return v_id;
-end;
-$;
-
-revoke all on function public.create_product_listing(text, text, text, text, text) from public, anon;
-grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
-
-commit;
- then
-    raise exception using errcode = '22023', message = 'Website must use HTTPS';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-listings:' || v_owner::text, 0));
-  select plan, subscription_status, email_verified_at, subscription_valid_until, grace_period_ends_at
-    into v_plan, v_sub, v_verified, v_valid_until, v_grace
-    from public.user_accounts where id = v_owner for update;
-  if not found then
-    raise exception using errcode = 'P0002', message = 'Founder account is not initialized';
-  end if;
-  if v_verified is null then
-    raise exception using errcode = '42501', message = 'Verify your email before submitting a listing';
-  end if;
-  if not public.subscription_is_eligible(v_sub, v_valid_until, v_grace) then
-    raise exception using errcode = '42501', message = 'An eligible subscription is required to submit a listing';
-  end if;
-
-  select plan_catalog -> v_plan::text into v_plan_config from public.credit_rules where singleton;
-  if v_plan_config is null then
-    raise exception using errcode = 'P0002', message = 'Account plan has no configured listing rule';
-  end if;
-  v_limit := nullif(v_plan_config ->> 'listing_limit', '')::integer;
-  select count(*) into v_count from public.products
-    where owner_id = v_owner and state in ('pending', 'approved', 'paused');
-  if v_limit is not null and v_count >= v_limit then
-    raise exception using errcode = '22023', message = 'Your plan listing limit has been reached';
-  end if;
-
-  v_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'))
-    || '-' || substr(v_id::text, 1, 8);
-  insert into public.products(id, owner_id, name, slug, tagline, description, category, website_url)
-    values (v_id, v_owner, trim(p_name), v_slug, trim(p_tagline), coalesce(p_description, ''), trim(p_category), p_website_url);
-  return v_id;
-end;
-$;
-
-revoke all on function public.create_product_listing(text, text, text, text, text) from public, anon;
-grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
+create trigger products_require_verified_email_before_insert
+before insert on public.products
+for each row execute function public.require_verified_email_for_product();
 
 commit;
