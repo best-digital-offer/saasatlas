@@ -383,7 +383,6 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
 }) {
   const next = Number(amount)
   const extra = Math.max(0, next - currentBid)
-  const belowMinimum = !Number.isSafeInteger(next) || next < minimumBid
   const eligible = Boolean(account?.email_verified_at && ['active','trialing'].includes(account.subscription_status)
     && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
   return <div className="overlay" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget) onClose()}}>
