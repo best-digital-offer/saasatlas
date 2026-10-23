@@ -240,8 +240,10 @@ function App() {
 
           <footer className="site-footer"><div className="footer-brand"><span className="brand-mark"><span /><span /><span /></span> Saaslist<span>Atlas</span></div><span>Find your next favorite tool.</span><div className="footer-links"><button onClick={() => setDialog('how')}>How it works</button><button onClick={() => setDialog('submit')}>Submit a product</button></div><small>© 2026 SaaslistAtlas</small></footer>
         </main>
+      ) : session ? (
+        <FounderWorkspace userId={session.user.id} email={session.user.email ?? ''} onSignOut={() => { void supabase?.auth.signOut() }} onHow={() => setDialog('how')} />
       ) : (
-        {session ? <FounderWorkspace userId={session.user.id} email={session.user.email ?? ''} onSignOut={() => { void supabase?.auth.signOut() }} onHow={() => setDialog('how')} /> : <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />}
+        <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />
       )}
 
       {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { setSelected(null); setRankGuideOpen(true) }} preview={dataState !== 'live'} />}
