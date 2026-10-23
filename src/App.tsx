@@ -200,9 +200,12 @@ function App() {
         p_idempotency_key: crypto.randomUUID(),
       })
       if (error) throw error
-      const bidResult = data as { rank?: number } | null
+      const bidResult = data as { rank?: number; additional_reserved?: number; released_credits?: number } | null
       setBidNotice(bidResult?.rank ? `Bid accepted. Your product is now #${bidResult.rank}.` : 'Bid accepted. The leaderboard has been updated.')
-      const { data: rows, error: rowsError } = await supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false })
+      const [{ data: rows, error: rowsError }, { data: freshWorkspace }] = await Promise.all([
+        supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
+        supabase.rpc('get_founder_workspace'),
+      ])
       if (!rowsError) {
         setLiveProducts(((rows ?? []) as PublicLeaderboardRecord[]).map((row, index) => ({
           id: row.id, name: row.name, tagline: row.tagline, category: row.category,
@@ -211,16 +214,14 @@ function App() {
           website: row.website_url, logoUrl: row.logo_url, currentRank: row.current_rank,
         })))
       }
-      const { data: freshWorkspace } = await supabase.rpc('get_founder_workspace')
       if (freshWorkspace) setWorkspacePayload(freshWorkspace as typeof workspacePayload)
-      setBidTarget((previous) => previous ? ({ ...previous, credits: amount }) : previous)
+      setBidTarget((previous) => previous ? ({ ...previous, credits: amount, currentRank: bidResult?.rank ?? previous.currentRank }) : previous)
     } catch (cause) {
       setBidError(cause instanceof Error ? cause.message : 'Bid was not accepted.')
     } finally {
       setBidSubmitting(false)
     }
   }
-
 
   const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
   const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
