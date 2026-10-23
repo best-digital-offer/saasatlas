@@ -115,6 +115,7 @@ function App() {
           symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
           tone: tones[index % tones.length],
           website: row.website_url,
+          logoUrl: row.logo_url,
           currentRank: rank,
         }
       }))
