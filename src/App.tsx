@@ -76,6 +76,9 @@ function App() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
+  const [catalogHasMore, setCatalogHasMore] = useState(false)
+  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false)
+  const [catalogOffset, setCatalogOffset] = useState(100)
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
   const [session, setSession] = useState<Session | null>(null)
 
@@ -103,59 +106,26 @@ function App() {
     if (!client) return
     let cancelled = false
     const loadLeaderboard = async () => {
-      const [leaderboardResult, catalogResult] = await Promise.all([
-        client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
-        client.from('published_catalog_products').select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at').order('name'),
-      ])
+      const { data, error } = await client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false })
       if (cancelled) return
-      if (leaderboardResult.error || catalogResult.error) {
+      if (error) {
         setDataState('error')
         setLiveProducts([])
-        setCatalogProducts([])
         return
       }
-      const rows = (leaderboardResult.data ?? []) as PublicLeaderboardRecord[]
-      const sourcedRows = (catalogResult.data ?? []) as PublicCatalogProductRecord[]
-      setLiveProducts(rows.map((row, index) => {
-        const rank = row.current_rank
-        const previousRank = row.previous_rank
-        return {
-          id: row.id,
-          name: row.name,
-          tagline: row.tagline,
-          category: row.category,
-          credits: row.standing_bid ?? 0,
-          movement: rank && previousRank ? previousRank - rank : 0,
-          symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
-          tone: tones[index % tones.length],
-          website: row.website_url,
-          logoUrl: row.logo_url,
-          currentRank: rank,
-        }
-      }))
-      setCatalogProducts(sourcedRows.map((row, index) => ({
-        id: `catalog-${row.id}`,
+      const rows = (data ?? []) as PublicLeaderboardRecord[]
+      setLiveProducts(rows.map((row, index) => ({
+        id: row.id,
         name: row.name,
-        tagline: row.description,
+        tagline: row.tagline,
         category: row.category,
-        credits: 0,
-        movement: 0,
+        credits: row.standing_bid ?? 0,
+        movement: row.current_rank && row.previous_rank ? row.previous_rank - row.current_rank : 0,
         symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
-        tone: tones[(index + rows.length) % tones.length],
-        website: row.canonical_url,
-        currentRank: null,
-        isCatalog: true,
-        sourceProvider: row.source_provider,
-        sourceUrl: row.source_url,
-        attributionText: row.attribution_text,
-        verifiedAt: row.verified_at,
-        pricingModel: row.pricing_model,
-        pricingUrl: row.pricing_url,
-        pricingVerifiedAt: row.pricing_verified_at,
-        logoUrl: row.logo_path,
-        descriptionSourceUrl: row.description_source_url,
-        descriptionVerifiedAt: row.description_verified_at,
-        seoPath: `/products/${row.slug}/`,
+        tone: tones[index % tones.length],
+        website: row.website_url,
+        logoUrl: row.logo_url,
+        currentRank: row.current_rank,
       })))
       setDataState('live')
     }
@@ -164,6 +134,63 @@ function App() {
     return () => { cancelled = true; window.clearInterval(refreshTimer) }
   }, [])
 
+  useEffect(() => {
+    const client = supabase
+    if (!client) return
+    let cancelled = false
+    const loadInitialCatalog = async () => {
+      const { data, error } = await client.from('published_catalog_products')
+        .select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at')
+        .order('name').range(0, 99)
+      if (cancelled) return
+      if (error) { setCatalogHasMore(false); return }
+      const rows = (data ?? []) as PublicCatalogProductRecord[]
+      setCatalogProducts(rows.map((row, index) => ({
+        id: `catalog-${row.id}`, name: row.name, tagline: row.description, category: row.category,
+        credits: 0, movement: 0, symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
+        tone: tones[(index + liveProducts.length) % tones.length], website: row.canonical_url,
+        currentRank: null, isCatalog: true, sourceProvider: row.source_provider, sourceUrl: row.source_url,
+        attributionText: row.attribution_text, verifiedAt: row.verified_at, pricingModel: row.pricing_model,
+        pricingUrl: row.pricing_url, pricingVerifiedAt: row.pricing_verified_at, logoUrl: row.logo_path,
+        descriptionSourceUrl: row.description_source_url, descriptionVerifiedAt: row.description_verified_at,
+        seoPath: `/products/${row.slug}/`,
+      })))
+      setCatalogOffset(rows.length)
+      setCatalogHasMore(rows.length === 100)
+    }
+    void loadInitialCatalog()
+    return () => { cancelled = true }
+  }, [])
+
+  async function loadMoreCatalogProducts() {
+    const client = supabase
+    if (!client || catalogLoadingMore || !catalogHasMore) return
+    setCatalogLoadingMore(true)
+    const start = catalogOffset
+    try {
+      const { data, error } = await client.from('published_catalog_products')
+        .select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at')
+        .order('name').range(start, start + 99)
+      if (error) throw error
+      const rows = (data ?? []) as PublicCatalogProductRecord[]
+      setCatalogProducts(previous => [...previous, ...rows.map((row, index) => ({
+        id: `catalog-${row.id}`, name: row.name, tagline: row.description, category: row.category,
+        credits: 0, movement: 0, symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
+        tone: tones[(start + index + liveProducts.length) % tones.length], website: row.canonical_url,
+        currentRank: null, isCatalog: true, sourceProvider: row.source_provider, sourceUrl: row.source_url,
+        attributionText: row.attribution_text, verifiedAt: row.verified_at, pricingModel: row.pricing_model,
+        pricingUrl: row.pricing_url, pricingVerifiedAt: row.pricing_verified_at, logoUrl: row.logo_path,
+        descriptionSourceUrl: row.description_source_url, descriptionVerifiedAt: row.description_verified_at,
+        seoPath: `/products/${row.slug}/`,
+      }))])
+      setCatalogOffset(start + rows.length)
+      setCatalogHasMore(rows.length === 100)
+    } catch (error) {
+      console.error('Unable to load more catalog products', error)
+    } finally {
+      setCatalogLoadingMore(false)
+    }
+  }
 
 
   function getMinimumBidForRank(productId: string, targetRank: number) {
