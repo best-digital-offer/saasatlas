@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
   CircleHelp, Compass, ExternalLink, Menu, Plus, Search, Sparkles,
-  Target, Trophy, X, Zap, LoaderCircle,
+  Trophy, X, Zap, LoaderCircle,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
