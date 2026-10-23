@@ -24,9 +24,8 @@ for delete to authenticated using (
 );
 
 -- Keep the listing checks and limits in the trusted RPC; only add the optional logo field.
-drop function public.create_product_listing(text, text, text, text, text);
 create function public.create_product_listing(
-  p_name text, p_tagline text, p_description text, p_category text, p_website_url text, p_logo_url text default null
+  p_name text, p_tagline text, p_description text, p_category text, p_website_url text, p_logo_url text
 )
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_owner uuid := auth.uid(); v_plan public.plan_tier; v_sub public.subscription_state; v_valid_until timestamptz; v_grace timestamptz;
