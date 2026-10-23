@@ -106,4 +106,10 @@ create trigger products_require_verified_email_before_insert
 before insert on public.products
 for each row execute function public.require_verified_email_for_product();
 
+
+-- Founder-owned listings publish immediately after the existing RPC validates
+-- an eligible subscription and the configured plan listing limit.
+-- Direct client INSERTs remain revoked; founders must use create_product_listing().
+alter table public.products alter column state set default 'approved';
+
 commit;
