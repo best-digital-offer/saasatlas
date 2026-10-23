@@ -5,6 +5,9 @@ import {
   Target, Trophy, X,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
+import type { Session } from '@supabase/supabase-js'
+import AuthDialog from './AuthDialog'
+import FounderWorkspace from './FounderWorkspace'
 import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
 import { rankTargetCredits } from './lib/rank-targets'
 
@@ -71,6 +74,15 @@ function App() {
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
+  const [session, setSession] = useState<Session | null>(null)
+
+  useEffect(() => {
+    if (!supabase) return
+    let active = true
+    void supabase.auth.getSession().then(({ data }) => { if (active) setSession(data.session) })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
+    return () => { active = false; subscription.unsubscribe() }
+  }, [])
 
   useEffect(() => {
     const client = supabase
@@ -170,11 +182,11 @@ function App() {
         {page === 'discover' ? (
           <div className="header-actions">
             <label className={`searchbox ${mobileSearchOpen ? 'mobile-search-open' : ''}`} onClick={() => { if (window.innerWidth <= 700 && !mobileSearchOpen) setMobileSearchOpen(true) }}><Search size={16} /><input autoFocus={mobileSearchOpen} aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }} /><kbd>/</kbd></label>
-            <button className="text-button login-button" onClick={() => setDialog('signin')}>Log in</button>
-            <button className="button button-primary submit-button" onClick={() => setDialog('submit')}>Submit a product</button>
+            <button className="text-button login-button" onClick={() => session ? void supabase?.auth.signOut() : setDialog('signin')}>{session ? 'Sign out' : 'Log in'}</button>
+            <button className="button button-primary submit-button" onClick={() => session ? setPage('founder') : setDialog('submit')}>Submit a product</button>
           </div>
         ) : (
-          <div className="header-actions"><span className="preview-chip"><span className="status-dot" /> Preview account</span><button className="button button-dark" onClick={() => setDialog('signin')}>Sign in <ArrowRight size={15} /></button></div>
+          <div className="header-actions">{session ? <span className="preview-chip"><span className="status-dot" /> {session.user.email}</span> : <span className="preview-chip"><span className="status-dot" /> Preview account</span>}{session ? <button className="button button-dark" onClick={() => void supabase?.auth.signOut()}>Sign out</button> : <button className="button button-dark" onClick={() => setDialog('signin')}>Sign in <ArrowRight size={15} /></button>}</div>
         )}
       </header>
 
@@ -228,6 +240,8 @@ function App() {
 
           <footer className="site-footer"><div className="footer-brand"><span className="brand-mark"><span /><span /><span /></span> Saaslist<span>Atlas</span></div><span>Find your next favorite tool.</span><div className="footer-links"><button onClick={() => setDialog('how')}>How it works</button><button onClick={() => setDialog('submit')}>Submit a product</button></div><small>© 2026 SaaslistAtlas</small></footer>
         </main>
+      ) : session ? (
+        <FounderWorkspace userId={session.user.id} email={session.user.email ?? ''} onSignOut={() => { void supabase?.auth.signOut() }} onHow={() => setDialog('how')} />
       ) : (
         <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />
       )}
@@ -238,9 +252,9 @@ function App() {
         onSelectRank={setRankTarget}
         rankedBids={liveProducts.filter((product) => product.currentRank !== null && product.currentRank !== undefined && product.credits > 0)}
         onClose={() => setRankGuideOpen(false)}
-        onContinue={() => { setRankGuideOpen(false); setDialog('signin') }}
+        onContinue={() => { setRankGuideOpen(false); if (session) setPage('founder'); else setDialog('signin') }}
       />}
-      {dialog && <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} />}
+      {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
 }
@@ -315,7 +329,7 @@ function RankTargetDialog({ selectedRank, onSelectRank, rankedBids, onClose, onC
         <div><span>Suggested bid for rank #{selectedRank}</span><strong>{targetCredits.toLocaleString()} <small>credits</small></strong></div>
         <p>{currentPosition ? `The current #${selectedRank} bid is ${currentPosition.credits.toLocaleString()} credits. The guide adjusts above it.` : 'Guide amount only. Your confirmed rank depends on all active bids when your bid is accepted.'}</p>
       </div>
-      <div className="rank-guide-notice"><CircleHelp size={15} /><span>Live bids require an approved founder listing, account sign-in, and available credits. Directory products are not bid eligible.</span></div>
+      <div className="rank-guide-notice"><CircleHelp size={15} /><span>Live bids require your own published founder listing, a verified account, an eligible subscription, and available credits. Sourced directory products cannot be bid on.</span></div>
       <div className="dialog-actions rank-guide-actions"><button className="button button-light" onClick={onClose}>Close</button><button className="button button-primary" onClick={onContinue}>Continue to bid <ArrowRight size={14} /></button></div>
     </section>
   </div>
@@ -323,7 +337,7 @@ function RankTargetDialog({ selectedRank, onSelectRank, rankedBids, onClose, onC
 
 function InfoDialog({ type, onClose, onSignIn }: { type: 'how' | 'submit' | 'signin'; onClose: () => void; onSignIn: () => void }) {
   const titles = { how: 'How the leaderboard works', submit: 'Submit your product', signin: 'Welcome back' }
-  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog info-dialog" role="dialog" aria-modal="true" aria-labelledby="info-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><span className="modal-mark">{type === 'how' ? <Trophy size={19} /> : type === 'submit' ? <Plus size={19} /> : <Compass size={19} />}</span><h2 id="info-dialog-title">{titles[type]}</h2>{type === 'how' ? <><p>Every product is ordered by its current eligible standing bid. A bid reserves credits while it remains active.</p><ol className="rules-list"><li><span>01</span><div><strong>Position follows the standing bid</strong><small>Higher bids rank above lower bids. Equal bids are ordered by when the accepted bid was recorded.</small></div></li><li><span>02</span><div><strong>Credits stay reserved</strong><small>Increasing a bid reserves only the difference. Lower-ranked listings keep their active reservations until changed or withdrawn.</small></div></li><li><span>03</span><div><strong>Every change is confirmed</strong><small>The server confirms bids and ranks. A displayed projection can change if another bid is accepted first.</small></div></li></ol><p className="detail-disclaimer">Preview data is illustrative. Live bidding is not yet enabled.</p></> : type === 'submit' ? <><p>Founders can submit a product after signing in. Each listing is reviewed before it becomes eligible for the leaderboard.</p><div className="form-note"><span className="status-dot" /> Submission review and account setup are not connected yet.</div><button className="button button-primary button-wide" onClick={onSignIn}>Continue to sign in <ArrowRight size={14} /></button></> : <><p>Live bid placement is not connected yet. Account sign-in and credit funding must be enabled before the database can accept a bid.</p><div className="auth-placeholder"><span className="auth-icon">S</span><span><strong>Bid account setup</strong><small>Authentication and credit balance are not yet available in the app.</small></span><span className="coming-soon">Coming soon</span></div><button className="button button-primary button-wide" onClick={onClose}>Close <ArrowRight size={14} /></button><small className="modal-footnote">Only an approved founder-owned listing can be bid on; sourced directory listings stay separate.</small></>}</section></div>
+  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog info-dialog" role="dialog" aria-modal="true" aria-labelledby="info-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><span className="modal-mark">{type === 'how' ? <Trophy size={19} /> : type === 'submit' ? <Plus size={19} /> : <Compass size={19} />}</span><h2 id="info-dialog-title">{titles[type]}</h2>{type === 'how' ? <><p>Every product is ordered by its current eligible standing bid. A bid reserves credits while it remains active.</p><ol className="rules-list"><li><span>01</span><div><strong>Position follows the standing bid</strong><small>Higher bids rank above lower bids. Equal bids are ordered by when the accepted bid was recorded.</small></div></li><li><span>02</span><div><strong>Credits stay reserved</strong><small>Increasing a bid reserves only the difference. Lower-ranked listings keep their active reservations until changed or withdrawn.</small></div></li><li><span>03</span><div><strong>Every change is confirmed</strong><small>The server confirms bids and ranks. A displayed projection can change if another bid is accepted first.</small></div></li></ol><p className="detail-disclaimer">Preview data is illustrative. Live bids require an eligible founder listing, an active subscription, and available credits.</p></> : type === 'submit' ? <><p>Founders can publish a product after signing in with a verified email and an eligible paid subscription. Listing limits are enforced by plan.</p><div className="form-note"><span className="status-dot" /> Sign in, verify your email, and activate a subscription to publish within your plan limit.</div><button className="button button-primary button-wide" onClick={onSignIn}>Continue to sign in <ArrowRight size={14} /></button></> : <><p>Sign in to open your founder workspace. You can publish an eligible listing and place a standing bid there. Bids are accepted only when your subscription is active and your wallet has enough available credits.</p><div className="auth-placeholder"><span className="auth-icon">S</span><span><strong>Founder account</strong><small>Sign in to manage your listings, referral rewards, and available bid credits.</small></span><span className="coming-soon">Founder workspace</span></div><button className="button button-primary button-wide" onClick={onClose}>Close <ArrowRight size={14} /></button><small className="modal-footnote">Only an approved founder-owned listing can be bid on; sourced directory listings stay separate.</small></>}</section></div>
 }
 
 export default App
