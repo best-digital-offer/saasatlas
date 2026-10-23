@@ -74,3 +74,5 @@
 @media(max-width:700px){.inline-bid-rank{grid-template-columns:1fr}.inline-bid-stat{flex-direction:row;align-items:center;justify-content:space-between}.inline-bid-stat strong{font-size:14px}.inline-bid-actions{flex-direction:column-reverse}.inline-bid-actions .button{width:100%}}
 
 .standing-bid-duration{border:1px solid #e5e9ef;background:#f8fafc;border-radius:11px;padding:13px 14px}.standing-bid-duration>strong{font-size:12px;color:#172033}.standing-bid-duration p{font-size:12px;line-height:1.55;color:#596579;margin:8px 0 0}.standing-bid-duration p strong{color:#222b3d}.product-boost{white-space:nowrap;justify-content:center;min-width:0;padding:0 12px;font-size:12px}.table-head span:last-child{visibility:hidden}@media(max-width:700px){.product-boost{font-size:10px;padding:0 7px;white-space:normal;line-height:1.2;min-height:34px}.product-row{min-height:76px}.table-head span:last-child{visibility:hidden}.standing-bid-duration{padding:11px}.standing-bid-duration p{font-size:11px}}
+
+.inline-bid-amount select{width:100%;height:46px;border:1px solid #d7dce4;border-radius:10px;padding:0 12px;font-size:15px;background:#fff;color:var(--ink)}
