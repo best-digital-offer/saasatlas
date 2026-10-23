@@ -221,52 +221,6 @@ function App() {
     }
   }
 
-  function openBidModal(product: Product) {
-    if (product.isCatalog) return
-    if (!session) { setDialog('signin'); return }
-    setBidError('')
-    setBidNotice('')
-    setBidTarget(product)
-    const current = product.credits ?? 0
-    const highestOther = liveProducts.filter((candidate) => candidate.id !== product.id).reduce((top, candidate) => Math.max(top, candidate.credits), 0)
-    const min = Math.max(5, highestOther > 0 ? highestOther + 5 : 5)
-    setBidInput(String(current > 0 ? Math.max(current + 5, min) : min))
-  }
-
-  async function submitInlineBid() {
-    if (!supabase || !session || !bidTarget) return
-    setBidError('')
-    setBidNotice('')
-    const amount = Number(bidInput)
-    if (!Number.isSafeInteger(amount) || amount <= 0) { setBidError('Enter a whole number of credits.'); return }
-    setBidSubmitting(true)
-    try {
-      const { data, error } = await supabase.rpc('place_or_update_bid', {
-        p_product_id: bidTarget.id,
-        p_amount: amount,
-        p_idempotency_key: crypto.randomUUID(),
-      })
-      if (error) throw error
-      const bidResult = data as { rank?: number } | null
-      setBidNotice(bidResult?.rank ? `Bid accepted. Your product is now #${bidResult.rank}.` : 'Bid accepted. The leaderboard has been updated.')
-      const { data: rows, error: rowsError } = await supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false })
-      if (!rowsError) {
-        setLiveProducts(((rows ?? []) as PublicLeaderboardRecord[]).map((row, index) => ({
-          id: row.id, name: row.name, tagline: row.tagline, category: row.category,
-          credits: row.standing_bid ?? 0, movement: row.current_rank && row.previous_rank ? row.previous_rank - row.current_rank : 0,
-          symbol: row.name.trim().slice(0, 1).toUpperCase() || '•', tone: tones[index % tones.length],
-          website: row.website_url, logoUrl: row.logo_url, currentRank: row.current_rank,
-        })))
-      }
-      const { data: freshWorkspace } = await supabase.rpc('get_founder_workspace')
-      if (freshWorkspace) setWorkspacePayload(freshWorkspace as typeof workspacePayload)
-      setBidTarget((previous) => previous ? ({ ...previous, credits: amount }) : previous)
-    } catch (cause) {
-      setBidError(cause instanceof Error ? cause.message : 'Bid was not accepted.')
-    } finally {
-      setBidSubmitting(false)
-    }
-  }
 
   const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
   const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
