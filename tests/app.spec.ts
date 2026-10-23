@@ -41,3 +41,21 @@ test('email sign-in dialog is wired to the authentication interface', async ({ p
   await expect(page.getByLabel('Password')).toBeVisible()
   await expect(page.getByRole('button', { name: /Create an account/ })).toBeVisible()
 })
+
+test('bid intent opens the founder sign-in flow without the obsolete placeholder', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.product-boost').first().click()
+  await expect(page.getByRole('dialog')).toContainText('Choose a rank to aim for')
+  await page.getByRole('button', { name: 'Continue to bid' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('Sign in to manage your listings and standing bids.')
+  await expect(dialog).not.toContainText('Live bid placement is not connected yet')
+  await expect(dialog).not.toContainText('credit funding must be enabled')
+})
+
+test('founder workspace does not prefill or advertise QueueTurn', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'For founders' }).click()
+  await expect(page.getByRole('heading', { name: 'Your founder workspace' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Prepare QueueTurn' })).toHaveCount(0)
+})
