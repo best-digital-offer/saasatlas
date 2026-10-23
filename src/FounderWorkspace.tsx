@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowRight, Check, Compass, Plus, RefreshCw, Trophy } from 'lucide-react'
+import { ArrowRight, Check, Compass, Plus, RefreshCw } from 'lucide-react'
 import { supabase } from './lib/supabase'
 
 type WorkspacePayload = {
