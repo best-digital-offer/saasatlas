@@ -37,7 +37,10 @@ export default function AuthDialog({ onClose, onSignedIn }: AuthDialogProps) {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { referral_code: new URLSearchParams(window.location.search).get('ref')?.trim().toLowerCase() || null },
+          },
         })
         if (signUpError) throw signUpError
         if (data.session) {
