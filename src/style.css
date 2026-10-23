@@ -59,3 +59,9 @@
 .referral-code>span{font-size:11px;color:var(--muted)}
 .referral-code>strong{font-family:ui-monospace,monospace;letter-spacing:.06em;margin-right:auto}
 @media(max-width:700px){.workspace-account{justify-content:flex-start;width:100%}.workspace-account>span{max-width:230px;overflow-wrap:anywhere}.listing-form{grid-template-columns:1fr;padding:13px}.listing-form .listing-description,.listing-form-actions,.listing-form-note{grid-column:1}.bid-editor{align-items:stretch}.bid-editor label{flex-basis:100%}.bid-editor .button{flex:1}.ledger-row{align-items:flex-start;flex-direction:column}.ledger-row>span{text-align:left}.workspace-alert{align-items:flex-start;line-height:1.5}.referral-code{gap:8px}.referral-code>strong{margin-right:0}.founder-product-main{flex-direction:column}.founder-product-metrics{gap:10px 18px}}
+
+/* Founder workspace actions and referral progress cards. */
+.section-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.referral-stats{margin:0 0 14px}
+.referral-stats .balance-card{min-width:0}
+@media(max-width:700px){.section-actions{width:100%;justify-content:flex-start}.section-actions .button{flex:1}.referral-stats{grid-template-columns:1fr}}
