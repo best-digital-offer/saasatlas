@@ -163,16 +163,7 @@ function App() {
     return () => { cancelled = true; window.clearInterval(refreshTimer) }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    async function readWorkspace() {
-      if (!supabase || !session) { setWorkspacePayload(null); return }
-      const { data, error } = await supabase.rpc('get_founder_workspace')
-      if (!cancelled && !error && data) setWorkspacePayload(data as typeof workspacePayload)
-    }
-    void readWorkspace()
-    return () => { cancelled = true }
-  }, [session])
+
 
   function openBidModal(product: Product) {
     if (product.isCatalog) return
