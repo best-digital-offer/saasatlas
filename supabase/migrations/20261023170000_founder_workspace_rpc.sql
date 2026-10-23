@@ -196,3 +196,85 @@ revoke all on function public.create_product_listing(text, text, text, text, tex
 grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
 
 commit;
+
+    raise exception using errcode = '22023', message = 'Website must use HTTPS';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-listings:' || v_owner::text, 0));
+  select plan, subscription_status, email_verified_at, subscription_valid_until, grace_period_ends_at
+    into v_plan, v_sub, v_verified, v_valid_until, v_grace
+    from public.user_accounts where id = v_owner for update;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Founder account is not initialized';
+  end if;
+  if v_verified is null then
+    raise exception using errcode = '42501', message = 'Verify your email before submitting a listing';
+  end if;
+  if not public.subscription_is_eligible(v_sub, v_valid_until, v_grace) then
+    raise exception using errcode = '42501', message = 'An eligible subscription is required to submit a listing';
+  end if;
+
+  select plan_catalog -> v_plan::text into v_plan_config from public.credit_rules where singleton;
+  if v_plan_config is null then
+    raise exception using errcode = 'P0002', message = 'Account plan has no configured listing rule';
+  end if;
+  v_limit := nullif(v_plan_config ->> 'listing_limit', '')::integer;
+  select count(*) into v_count from public.products
+    where owner_id = v_owner and state in ('pending', 'approved', 'paused');
+  if v_limit is not null and v_count >= v_limit then
+    raise exception using errcode = '22023', message = 'Your plan listing limit has been reached';
+  end if;
+
+  v_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'))
+    || '-' || substr(v_id::text, 1, 8);
+  insert into public.products(id, owner_id, name, slug, tagline, description, category, website_url)
+    values (v_id, v_owner, trim(p_name), v_slug, trim(p_tagline), coalesce(p_description, ''), trim(p_category), p_website_url);
+  return v_id;
+end;
+$;
+
+revoke all on function public.create_product_listing(text, text, text, text, text) from public, anon;
+grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
+
+commit;
+ then
+    raise exception using errcode = '22023', message = 'Website must use HTTPS';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-listings:' || v_owner::text, 0));
+  select plan, subscription_status, email_verified_at, subscription_valid_until, grace_period_ends_at
+    into v_plan, v_sub, v_verified, v_valid_until, v_grace
+    from public.user_accounts where id = v_owner for update;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Founder account is not initialized';
+  end if;
+  if v_verified is null then
+    raise exception using errcode = '42501', message = 'Verify your email before submitting a listing';
+  end if;
+  if not public.subscription_is_eligible(v_sub, v_valid_until, v_grace) then
+    raise exception using errcode = '42501', message = 'An eligible subscription is required to submit a listing';
+  end if;
+
+  select plan_catalog -> v_plan::text into v_plan_config from public.credit_rules where singleton;
+  if v_plan_config is null then
+    raise exception using errcode = 'P0002', message = 'Account plan has no configured listing rule';
+  end if;
+  v_limit := nullif(v_plan_config ->> 'listing_limit', '')::integer;
+  select count(*) into v_count from public.products
+    where owner_id = v_owner and state in ('pending', 'approved', 'paused');
+  if v_limit is not null and v_count >= v_limit then
+    raise exception using errcode = '22023', message = 'Your plan listing limit has been reached';
+  end if;
+
+  v_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'))
+    || '-' || substr(v_id::text, 1, 8);
+  insert into public.products(id, owner_id, name, slug, tagline, description, category, website_url)
+    values (v_id, v_owner, trim(p_name), v_slug, trim(p_tagline), coalesce(p_description, ''), trim(p_category), p_website_url);
+  return v_id;
+end;
+$;
+
+revoke all on function public.create_product_listing(text, text, text, text, text) from public, anon;
+grant execute on function public.create_product_listing(text, text, text, text, text) to authenticated;
+
+commit;
