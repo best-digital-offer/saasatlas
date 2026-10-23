@@ -72,7 +72,33 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .empty-state.empty-directory button { margin-top: 2px; border: 0; border-radius: 7px; padding: 10px 14px; color: #fff; background: #245d43; text-decoration: none; font-size: 12px; }
 .empty-state.empty-directory button:hover { background: #1b4d36; }
 .top-ten-empty { margin: 9px 0; color: #78847c; font-size: 12px; line-height: 1.55; }
+.top-ten-heading { align-items: center; }
+.top-ten-actions { display: flex; align-items: center; gap: 12px; }
+.top-ten-actions .rank-bid-link { display: inline-flex; align-items: center; gap: 5px; color: #386347; font-weight: 650; }
 .dialog { border: 1px solid #e4e9e4; box-shadow: 0 25px 70px rgba(23, 37, 31, .16); }
+.rank-guide-dialog { width: min(100%, 590px); max-height: min(88vh, 820px); overflow-y: auto; padding: 30px; }
+.rank-guide-icon { width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 15px; border-radius: 12px; background: #eef5e9; color: #3c704e; }
+.rank-guide-dialog > .sample-kicker { display: block; }
+.rank-guide-dialog h2 { margin: 7px 40px 6px 0; color: #273d32; font: 400 29px/1.15 var(--serif); letter-spacing: -.4px; }
+.rank-guide-intro { margin: 0 0 19px; color: #727e78; font-size: 12px; line-height: 1.6; }
+.rank-target-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rank-target-option { min-height: 67px; display: grid; grid-template-columns: 1fr auto; align-content: center; align-items: baseline; gap: 3px 10px; padding: 10px 12px; text-align: left; border: 1px solid #e9ede7; border-radius: 10px; background: #fff; color: #46554c; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.rank-target-option:hover { border-color: #b7c9b8; transform: translateY(-1px); }
+.rank-target-option.selected { border-color: #608467; background: #f3f8f1; box-shadow: inset 0 0 0 1px #608467; }
+.rank-target-option > span { font-size: 11px; color: #7d8981; }
+.rank-target-option > span strong { color: #384b3d; }
+.rank-target-option > b { color: #2e4738; font-size: 15px; font-variant-numeric: tabular-nums; }
+.rank-target-option > b small { font-size: 9px; font-weight: 500; color: #79867e; }
+.rank-target-option em { grid-column: 1/-1; color: #89928c; font-size: 9px; font-style: normal; }
+.rank-guide-summary { margin-top: 14px; padding: 14px 15px; border-radius: 10px; background: #f6f8f4; }
+.rank-guide-summary > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.rank-guide-summary > div > span { color: #66746a; font-size: 11px; }
+.rank-guide-summary > div > strong { white-space: nowrap; color: #2c4938; font-size: 21px; font-variant-numeric: tabular-nums; }
+.rank-guide-summary > div > strong small { font-size: 10px; font-weight: 500; }
+.rank-guide-summary p { margin: 6px 0 0; color: #89938b; font-size: 10px; line-height: 1.5; }
+.rank-guide-notice { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 11px 12px; border: 1px solid #e8ece5; border-radius: 8px; color: #758078; font-size: 10px; line-height: 1.5; }
+.rank-guide-notice svg { flex: none; margin-top: 1px; color: #748966; }
+.rank-guide-actions { margin-top: 16px; }
 .info-dialog .modal-mark { background: #edf4e5; color: #3c704b; }
 .form-note { border-color: #e3eae0; background: #f8faf6; }
 
@@ -103,4 +129,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .balance-card { border-radius: 8px; }
   .workspace-empty { border-radius: 9px; }
   .top-ten-empty { margin: 9px 0 3px; font-size: 11px; }
+  .top-ten-heading { height: auto; min-height: 42px; gap: 8px; }
+  .top-ten-actions { gap: 9px; }
+  .top-ten-actions .rank-bid-link { font-size: 10px; }
+  .rank-guide-dialog { padding: 24px 19px 19px; }
+  .rank-guide-dialog h2 { font-size: 25px; }
+  .rank-target-grid { gap: 6px; }
+  .rank-target-option { min-height: 62px; padding: 8px 9px; }
+  .rank-guide-summary > div > span { font-size: 10px; }
+  .rank-guide-summary > div > strong { font-size: 18px; }
+  .rank-guide-actions .button { font-size: 10px; padding: 0 10px; }
 }

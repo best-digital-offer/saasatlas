@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
   CircleHelp, Compass, ExternalLink, Filter, Menu, Plus, Search, Sparkles,
-  Trophy, X,
+  Target, Trophy, X,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
 import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
+import { rankTargetCredits } from './lib/rank-targets'
 
 type Product = {
   id: string
@@ -61,6 +62,8 @@ function App() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('rank')
   const [selected, setSelected] = useState<Product | null>(null)
+  const [rankGuideOpen, setRankGuideOpen] = useState(false)
+  const [rankTarget, setRankTarget] = useState(1)
   const [dialog, setDialog] = useState<'how' | 'submit' | 'signin' | null>(null)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
@@ -213,7 +216,7 @@ function App() {
               <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `${products.length} directory listings`}</span><button onClick={() => { setCategory('All products'); setQuery(''); setStatus('All active'); setSort('rank') }}>Clear filters <X size={13} /></button></div>
             </div>
             <aside className="top-ten-panel">
-              <div className="top-ten-heading"><h2>Top 10</h2><button onClick={() => { setCategory('All products'); setQuery('') }}>All active <ChevronRight size={15} /></button></div>
+              <div className="top-ten-heading"><h2>Top 10</h2><div className="top-ten-actions"><button className="rank-bid-link" onClick={() => setRankGuideOpen(true)}><Target size={13} /> Bid to rank</button><button onClick={() => { setCategory('All products'); setQuery('') }}>All active <ChevronRight size={15} /></button></div></div>
               <div className="top-ten-list">{allProducts.filter((product) => {
                 const rank = rankById.get(product.id)
                 return rank !== null && rank !== undefined && rank <= 10
@@ -228,7 +231,14 @@ function App() {
         <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />
       )}
 
-      {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { setSelected(null); setPage('founder'); setDialog('signin') }} preview={dataState !== 'live'} />}
+      {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { setSelected(null); setRankGuideOpen(true) }} preview={dataState !== 'live'} />}
+      {rankGuideOpen && <RankTargetDialog
+        selectedRank={rankTarget}
+        onSelectRank={setRankTarget}
+        rankedBids={liveProducts.filter((product) => product.currentRank !== null && product.currentRank !== undefined && product.credits > 0)}
+        onClose={() => setRankGuideOpen(false)}
+        onContinue={() => { setRankGuideOpen(false); setDialog('signin') }}
+      />}
       {dialog && <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} />}
     </div>
   )
@@ -266,15 +276,53 @@ function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Pr
       <div className="dialog-actions">
         {product.isCatalog && product.seoPath && <a className="button button-light" href={product.seoPath}>Product profile <ExternalLink size={14} /></a>}
         <a className="button button-light" href={websiteUrl} target={preview ? undefined : '_blank'} rel="noreferrer" onClick={preview ? (event) => event.preventDefault() : undefined}>Visit website <ExternalLink size={14} /></a>
-        {!product.isCatalog && <button className="button button-primary" onClick={onBid}>Back this product <ArrowRight size={14} /></button>}
+        {!product.isCatalog && <button className="button button-primary" onClick={onBid}>Bid to rank with your product <ArrowRight size={14} /></button>}
       </div>
+    </section>
+  </div>
+}
+
+function RankTargetDialog({ selectedRank, onSelectRank, rankedBids, onClose, onContinue }: {
+  selectedRank: number
+  onSelectRank: (rank: number) => void
+  rankedBids: Product[]
+  onClose: () => void
+  onContinue: () => void
+}) {
+  const ranked = [...rankedBids].sort((a, b) => (a.currentRank ?? 999) - (b.currentRank ?? 999))
+  const target = rankTargetCredits[selectedRank - 1]
+  const currentPosition = ranked.find((product) => product.currentRank === selectedRank)
+  const targetCredits = Math.max(target.credits, currentPosition ? currentPosition.credits + 5 : 0)
+
+  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="dialog rank-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="rank-guide-title">
+      <button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+      <span className="rank-guide-icon"><Target size={18} /></span>
+      <span className="sample-kicker">Standing bid guide</span>
+      <h2 id="rank-guide-title">Choose a rank to aim for</h2>
+      <p className="rank-guide-intro">Choose a target for your own approved founder listing. The #1 guide starts at 1,770 credits and steps down by rank.</p>
+      <div className="rank-target-grid" role="list" aria-label="Suggested bids by rank">
+        {rankTargetCredits.map(({ rank, credits }) => {
+          const current = ranked.find((product) => product.currentRank === rank)
+          const amount = Math.max(credits, current ? current.credits + 5 : 0)
+          return <button key={rank} role="listitem" className={`rank-target-option ${rank === selectedRank ? 'selected' : ''}`} onClick={() => onSelectRank(rank)} aria-pressed={rank === selectedRank}>
+            <span>Rank <strong>#{rank}</strong></span><b>{amount.toLocaleString()}<small> cr</small></b>{current && <em>Current: {current.credits.toLocaleString()}</em>}
+          </button>
+        })}
+      </div>
+      <div className="rank-guide-summary">
+        <div><span>Suggested bid for rank #{selectedRank}</span><strong>{targetCredits.toLocaleString()} <small>credits</small></strong></div>
+        <p>{currentPosition ? `The current #${selectedRank} bid is ${currentPosition.credits.toLocaleString()} credits. The guide adjusts above it.` : 'Guide amount only. Your confirmed rank depends on all active bids when your bid is accepted.'}</p>
+      </div>
+      <div className="rank-guide-notice"><CircleHelp size={15} /><span>Live bids require an approved founder listing, account sign-in, and available credits. Directory products are not bid eligible.</span></div>
+      <div className="dialog-actions rank-guide-actions"><button className="button button-light" onClick={onClose}>Close</button><button className="button button-primary" onClick={onContinue}>Continue to bid <ArrowRight size={14} /></button></div>
     </section>
   </div>
 }
 
 function InfoDialog({ type, onClose, onSignIn }: { type: 'how' | 'submit' | 'signin'; onClose: () => void; onSignIn: () => void }) {
   const titles = { how: 'How the leaderboard works', submit: 'Submit your product', signin: 'Welcome back' }
-  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog info-dialog" role="dialog" aria-modal="true" aria-labelledby="info-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><span className="modal-mark">{type === 'how' ? <Trophy size={19} /> : type === 'submit' ? <Plus size={19} /> : <Compass size={19} />}</span><h2 id="info-dialog-title">{titles[type]}</h2>{type === 'how' ? <><p>Every product is ordered by its current eligible standing bid. A bid reserves credits for that listing while it remains active.</p><ol className="rules-list"><li><span>01</span><div><strong>Position follows the standing bid</strong><small>Higher bids rank above lower bids. Equal bids are ordered by when the accepted bid was recorded.</small></div></li><li><span>02</span><div><strong>Credits stay reserved</strong><small>Increasing a bid reserves only the difference. Lower-ranked listings keep their active reservations until changed or withdrawn.</small></div></li><li><span>03</span><div><strong>Every change is confirmed</strong><small>The server confirms bids and ranks. A displayed projection can change if another bid is accepted first.</small></div></li></ol><p className="detail-disclaimer">Preview data is illustrative. Live bidding is not yet enabled.</p></> : type === 'submit' ? <><p>Founders can submit a product after signing in. Each listing is reviewed before it becomes eligible for the leaderboard.</p><div className="form-note"><span className="status-dot" /> Submission review and account setup are not connected yet.</div><button className="button button-primary button-wide" onClick={onSignIn}>Continue to sign in <ArrowRight size={14} /></button></> : <><p>Sign in to manage products, track referrals, and take part in the credit-backed leaderboard.</p><div className="auth-placeholder"><span className="auth-icon">S</span><span><strong>Account sign-in</strong><small>Supabase Auth connection is pending.</small></span><span className="coming-soon">Not connected</span></div><button className="button button-primary button-wide" onClick={onClose} disabled>Sign in <ArrowRight size={14} /></button><small className="modal-footnote">Authentication will be enabled after the database project is connected.</small></>}</section></div>
+  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog info-dialog" role="dialog" aria-modal="true" aria-labelledby="info-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><span className="modal-mark">{type === 'how' ? <Trophy size={19} /> : type === 'submit' ? <Plus size={19} /> : <Compass size={19} />}</span><h2 id="info-dialog-title">{titles[type]}</h2>{type === 'how' ? <><p>Every product is ordered by its current eligible standing bid. A bid reserves credits while it remains active.</p><ol className="rules-list"><li><span>01</span><div><strong>Position follows the standing bid</strong><small>Higher bids rank above lower bids. Equal bids are ordered by when the accepted bid was recorded.</small></div></li><li><span>02</span><div><strong>Credits stay reserved</strong><small>Increasing a bid reserves only the difference. Lower-ranked listings keep their active reservations until changed or withdrawn.</small></div></li><li><span>03</span><div><strong>Every change is confirmed</strong><small>The server confirms bids and ranks. A displayed projection can change if another bid is accepted first.</small></div></li></ol><p className="detail-disclaimer">Preview data is illustrative. Live bidding is not yet enabled.</p></> : type === 'submit' ? <><p>Founders can submit a product after signing in. Each listing is reviewed before it becomes eligible for the leaderboard.</p><div className="form-note"><span className="status-dot" /> Submission review and account setup are not connected yet.</div><button className="button button-primary button-wide" onClick={onSignIn}>Continue to sign in <ArrowRight size={14} /></button></> : <><p>Live bid placement is not connected yet. Account sign-in and credit funding must be enabled before the database can accept a bid.</p><div className="auth-placeholder"><span className="auth-icon">S</span><span><strong>Bid account setup</strong><small>Authentication and credit balance are not yet available in the app.</small></span><span className="coming-soon">Coming soon</span></div><button className="button button-primary button-wide" onClick={onClose}>Close <ArrowRight size={14} /></button><small className="modal-footnote">Only an approved founder-owned listing can be bid on; sourced directory listings stay separate.</small></>}</section></div>
 }
 
 export default App

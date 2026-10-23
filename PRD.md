@@ -25,6 +25,7 @@ SaaslistAtlas is a discovery directory for global SaaS and AI products. Founders
 - Rank order is bid amount descending, accepted-at time ascending for equal amounts, then stable product ID.
 - A higher bid reserves only its net increase; a lower bid releases only the excess after the database commit.
 - Credits remain reserved for active standing bids even outside the visible top ten.
+- The rank guide shows suggested top-ten starting bids from 1,770 credits at rank 1 down by 180 credits per position to 150 at rank 10. These are planning guidance only; confirmed rank always follows accepted eligible bids and the configured minimum increment.
 - A withdraw operation releases that listing's reservation atomically and is subject to a configurable cooldown.
 - All bid decisions are revalidated by PostgreSQL under a serialized transaction; client state is never authoritative.
 - Account plan, email verification, listing eligibility, and moderation status are checked server-side.
