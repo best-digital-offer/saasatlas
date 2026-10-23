@@ -286,7 +286,7 @@ function App() {
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   
-                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Boost ${product.name}`}><Zap size={14} /> Boost</button>}
+                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Place standing bid for ${product.name}`}><Zap size={14} /> Place standing bid</button>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
