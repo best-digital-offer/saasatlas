@@ -14,6 +14,7 @@ export type PublicLeaderboardRecord = {
   tagline: string
   category: string
   website_url: string
+  logo_url: string | null
   standing_bid: number | null
   current_rank: number | null
   previous_rank: number | null
