@@ -73,7 +73,9 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
 
   const account = workspace.account
   const wallet = workspace.wallet
-  const eligible = subscriptionEligible(account)
+  const verified = Boolean(account?.email_verified_at)
+  const subscriptionActive = subscriptionEligible(account)
+  const eligible = verified && subscriptionActive
   const activeBidCount = useMemo(() => workspace.products.filter((product) => product.bid_state === 'active').length, [workspace.products])
 
   async function submitProduct(event: FormEvent<HTMLFormElement>) {
@@ -132,7 +134,7 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
     </div>
     {error && <div className="workspace-alert error" role="alert">{error}<button onClick={() => void load()} aria-label="Retry loading"><RefreshCw size={14} /></button></div>}
     {notice && <div className="workspace-alert success" role="status"><Check size={15} />{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message">×</button></div>}
-    {!eligible && account && <div className="workspace-alert neutral"><strong>Plan required for listings and bidding.</strong><span>Your current subscription status is {prettyStatus(account.subscription_status)}. Billing is not enabled yet, so these actions remain protected until a valid subscription exists.</span></div>}
+    {account && !verified && <div className="workspace-alert neutral"><strong>Verify your email to continue.</strong><span>Confirm your email address before submitting a listing or placing a bid.</span></div>}{account && verified && !subscriptionActive && <div className="workspace-alert neutral"><strong>Plan required for listings and bidding.</strong><span>Your current subscription status is {prettyStatus(account.subscription_status)}. Billing is not enabled yet, so these actions remain protected until a valid subscription exists.</span></div>}
     {loading ? <div className="workspace-empty"><span className="empty-emblem"><RefreshCw size={20} /></span><h3>Loading your workspace</h3><p>Reading your account and credit activity securely.</p></div> : <>
       <div className="balance-grid">
         <section className="balance-card"><span>Available credits</span><strong>{wallet ? wallet.available.toLocaleString() : '—'}</strong><small>Ready for an eligible standing bid</small></section>
