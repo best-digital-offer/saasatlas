@@ -8,6 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "catalog:prepare": "node scripts/prepare-catalog-import.mjs",
+    "catalog:verify": "node scripts/import-catalog.mjs data/catalog-import-2026-10-23.json verify",
+    "catalog:import": "node scripts/import-catalog.mjs data/catalog-import-2026-10-23.json import",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
