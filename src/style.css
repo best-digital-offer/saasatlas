@@ -65,3 +65,7 @@
 .referral-stats{margin:0 0 14px}
 .referral-stats .balance-card{min-width:0}
 @media(max-width:700px){.section-actions{width:100%;justify-content:flex-start}.section-actions .button{flex:1}.referral-stats{grid-template-columns:1fr}}
+
+
+/* Founder product logo upload */
+.listing-logo-field{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:13px 0}.listing-logo-label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:650}.listing-logo-label small{font-size:11px;color:#778092;font-weight:450}.logo-upload-control{display:inline-flex;align-items:center;gap:10px;min-height:58px;padding:8px 13px;border:1px dashed #cfd5df;border-radius:10px;background:#fbfcfd;color:#394356;font-size:12px;font-weight:600;cursor:pointer;max-width:100%}.logo-upload-control img{width:42px;height:42px;object-fit:contain;border-radius:7px;background:#fff}.logo-upload-control input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0,0,0,0)}.logo-upload-control:focus-within{outline:3px solid rgba(141,195,34,.55);outline-offset:3px}.logo-remove{min-height:34px;padding:0 10px}.founder-product-logo{width:48px;height:48px;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff;padding:4px;flex:none}
