@@ -66,6 +66,7 @@ function App() {
   const [selected, setSelected] = useState<Product | null>(null)
   const [bidTarget, setBidTarget] = useState<Product | null>(null)
   const [bidInput, setBidInput] = useState('')
+  const [bidTargetRank, setBidTargetRank] = useState(1)
   const [bidSubmitting, setBidSubmitting] = useState(false)
   const [bidError, setBidError] = useState('')
   const [bidNotice, setBidNotice] = useState('')
@@ -165,16 +166,25 @@ function App() {
 
 
 
+  function getMinimumBidForRank(productId: string, targetRank: number) {
+    const others = liveProducts
+      .filter((candidate) => candidate.id !== productId)
+      .slice()
+      .sort((a, b) => (a.currentRank ?? 999999) - (b.currentRank ?? 999999))
+    const rowAtTarget = others[targetRank - 1]
+    return rowAtTarget && rowAtTarget.credits > 0 ? rowAtTarget.credits + 5 : 5
+  }
+
   function openBidModal(product: Product) {
     if (product.isCatalog) return
     if (!session) { setDialog('signin'); return }
     setBidError('')
     setBidNotice('')
     setBidTarget(product)
-    const current = product.credits ?? 0
-    const highestOther = liveProducts.filter((candidate) => candidate.id !== product.id).reduce((top, candidate) => Math.max(top, candidate.credits), 0)
-    const min = Math.max(5, highestOther > 0 ? highestOther + 5 : 5)
-    setBidInput(String(current > 0 ? Math.max(current + 5, min) : min))
+    const targetRank = Math.min(100, Math.max(1, product.currentRank ?? 1))
+    const minimum = getMinimumBidForRank(product.id, targetRank)
+    setBidTargetRank(targetRank)
+    setBidInput(String(Math.max((product.credits ?? 0) + 5, minimum)))
   }
 
   async function submitInlineBid() {
@@ -189,6 +199,7 @@ function App() {
         p_product_id: bidTarget.id,
         p_amount: amount,
         p_idempotency_key: crypto.randomUUID(),
+        p_target_rank: bidTargetRank,
       })
       if (error) throw error
       const bidResult = data as { rank?: number; additional_reserved?: number; released_credits?: number } | null
@@ -277,7 +288,7 @@ function App() {
           <section className="leaderboard-layout single-column" aria-label="SaaS leaderboard">
             <div className="results-column">
               <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
-              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span>Standing bid</span><span aria-hidden="true"></span></div>
+              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span aria-hidden="true"></span></div>
               {products.length ? products.map((product) => {
                 const rank = rankById.get(product.id) ?? null
                 return <div className="product-row" key={product.id}>
@@ -286,7 +297,7 @@ function App() {
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   
-                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Place standing bid for ${product.name}`}><Zap size={14} /> Place standing bid</button>}
+                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Bid for a position with ${product.name}`}><Zap size={14} /> Bid for a position</button>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
@@ -308,7 +319,7 @@ function App() {
       )}
 
       {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openBidModal(target) }} preview={dataState !== 'live'} />}
-      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
+      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} targetRank={bidTargetRank} setTargetRank={(rank) => { setBidTargetRank(rank); setBidInput(String(Math.max(bidTarget.credits + 5, getMinimumBidForRank(bidTarget.id, rank)))) }} minimumBid={getMinimumBidForRank(bidTarget.id, bidTargetRank)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
       {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
@@ -352,12 +363,15 @@ function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Pr
   </div>
 }
 
-function InlineBidDialog({ product, session, wallet, account, currentBid, amount, setAmount, submitting, error, notice, onClose, onSubmit, onSignIn }: {
+function InlineBidDialog({ product, session, wallet, account, currentBid, targetRank, setTargetRank, minimumBid, amount, setAmount, submitting, error, notice, onClose, onSubmit, onSignIn }: {
   product: Product
   session: Session | null
   wallet: {available:number; reserved:number} | null
   account: {email_verified_at:string|null; subscription_status:string; subscription_valid_until:string|null; grace_period_ends_at:string|null} | null
   currentBid: number
+  targetRank: number
+  setTargetRank: (rank:number)=>void
+  minimumBid: number
   amount: string
   setAmount: (value:string)=>void
   submitting: boolean
@@ -369,6 +383,7 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, amount
 }) {
   const next = Number(amount)
   const extra = Math.max(0, next - currentBid)
+  const belowMinimum = !Number.isSafeInteger(next) || next < minimumBid
   const eligible = Boolean(account?.email_verified_at && ['active','trialing'].includes(account.subscription_status)
     && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
   return <div className="overlay" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget) onClose()}}>
@@ -383,12 +398,13 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, amount
       </div>
       {session ? <>
         {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for bidding.</div>}
-        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Your total standing bid (credits)</label><input id="inline-bid-amount" type="number" min="1" step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
-        <p className="inline-bid-helper">Enter the total number of credits you want committed to this listing, not an extra top-up. {extra.toLocaleString()} additional credits would be reserved if your bid increases; reducing your bid releases the difference.</p><div className="standing-bid-duration"><strong>How long will your position last?</strong><p>Your bid has no fixed time limit. It stays active until you change or withdraw it, or your listing becomes ineligible. If another eligible listing places a higher standing bid, your listing automatically moves down the rankings. A higher bid can overtake yours at any time.</p><p><strong>Paying credits does not guarantee a permanent position.</strong> Rankings update as eligible standing bids change.</p></div>
+        <div className="inline-bid-amount"><label htmlFor="inline-bid-target-rank">Target position (1–100)</label><select id="inline-bid-target-rank" value={targetRank} onChange={(event)=>setTargetRank(Number(event.target.value))}>{Array.from({length:100},(_,index)=>index+1).map((rank)=><option key={rank} value={rank}>Position #{rank}</option>)}</select></div>
+        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Your total standing bid (credits)</label><input id="inline-bid-amount" type="number" min={minimumBid} step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
+        <p className="inline-bid-helper">Minimum to reach position #{targetRank} or higher: <strong>{minimumBid.toLocaleString()} credits</strong>. Higher bids rank above lower bids, so your final position may be better than the selected target. {extra.toLocaleString()} additional credits would be reserved if your bid increases; reducing your bid releases the difference.</p><div className="standing-bid-duration"><strong>How long will your position last?</strong><p>Your bid has no fixed time limit. It stays active until you change or withdraw it, or your listing becomes ineligible. If another eligible listing places a higher standing bid, your listing automatically moves down the rankings. A higher bid can overtake yours at any time.</p><p><strong>Paying credits does not guarantee a permanent position.</strong> Rankings update as eligible standing bids change.</p></div>
       </> : <><p className="inline-bid-signin">Sign in to reserve credits and place a standing bid on this listing.</p></>}
       {error && <div className="inline-bid-message error" role="alert">{error}</div>}
       {notice && <div className="inline-bid-message notice" role="status">{notice}</div>}
-      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : `Pay ${next.toLocaleString()} credits for this position`}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
+      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<minimumBid || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : `Pay ${next.toLocaleString()} credits to reach #${targetRank} or higher`}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
     </section>
   </div>
 }
