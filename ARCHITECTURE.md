@@ -3,9 +3,9 @@
 | Concern | Choice | Reason |
 | --- | --- | --- |
 | UI | React + TypeScript + Vite | Fast, responsive app shell with a small deployable client. |
-| Hosting | Vercel, connected to the private GitHub repository | Preview and production builds from version-controlled source. Not yet connected. |
-| Database | Supabase PostgreSQL | Row-level policies, transactions, auth integration, and managed backups. Project creation is currently blocked by the free-project cap. |
-| Identity | Supabase Auth | Email verification and managed sessions; application login is not yet wired because no project exists. |
+| Hosting | Vercel project `saasatlas`, connected to `best-digital-offer/saasatlas` | Production builds from `main`; deployment access follows the team's Vercel Authentication protection. |
+| Database | Supabase PostgreSQL project `saasatlas` | Row-level policies, transactions, and managed backups. |
+| Identity | Supabase Auth | Email verification and managed sessions; the application login UI is not yet wired. |
 | Bid mutation | PostgreSQL security-definer RPC | Authenticates with `auth.uid()`, locks the leaderboard, locks credit rows, validates rules, updates reservations, and refreshes ranks inside one database transaction. |
 | Ledger | Append-only `credit_ledger` plus constrained cached wallet | Immutable history is the accounting source; cached available/reserved totals are reconciled against ledger deltas. |
 | Live directory | 30-second visible-tab polling | Reliable refresh without assuming Realtime publication configuration. |
@@ -32,4 +32,4 @@ When a subscription expires beyond its grace period, product records remain. A t
 
 ## Deployment and setup
 
-Copy `.env.example` to `.env.local`, then set only the Supabase project URL and publishable/anon key. Apply the migration to a new project before enabling those keys. Keep service-role and payment provider secrets only in server-side secret storage, never `VITE_*`. Connect Vercel to the GitHub repository after the repo is created. No production deployment has been created or verified.
+The production Supabase project is `saasatlas` in `ap-south-1`. Its core schema and access-control migration are applied. The `public.public_leaderboard` view runs with `security_invoker`; a private filtered source view supplies the public rows without granting clients access to the underlying account and bid tables. `public.bid_requests` has owner-only read access and no client write grants. The public Supabase URL and publishable key are configured for Vercel production, preview, and development environments. Keep service-role and payment provider secrets only in server-side secret storage, never `VITE_*`.

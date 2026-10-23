@@ -1,50 +1,38 @@
 # Project status
 
-## Done
+## Completed
 
-- Created a React + TypeScript app with a custom SaaslistAtlas design direction and responsive public leaderboard and founder workspace.
-- Added working category/search/sort/top-ten filters, product details, rank rules explainer, and explicit demo-data labeling.
-- Added Supabase leaderboard client with polling; live rows replace sample content only after a successful database response.
-- Added a core PostgreSQL migration for profiles, eligible products, wallets, immutable ledger, standing bids, rank events, notifications, referrals, purchase/webhook records, RLS, listing limits, and transactional bid/withdraw functions.
-- Added unit tests for integer bid validation, overtake increments, net reservation changes, and deterministic tie-break ordering; 6 passed.
-- Added browser tests for public filters/detail dialogs, founder navigation, and mobile overflow; 2 passed in local Chromium.
-- Added product brief, architecture notes, and local setup instructions.
+- Built a polished, responsive SaaslistAtlas directory and founder workspace.
+- Added category, search, sort, top-ten filters, product details, and ranking rules.
+- Pushed the app to `best-digital-offer/saasatlas` on `main` (GitHub reports the repository is public).
+- Created Vercel project `saasatlas`, connected its GitHub integration, and deployed the production build. Team deployment protection remains enabled.
+- Created Supabase project `saasatlas` in `ap-south-1` under the selected organization.
+- Applied the core schema and an access-control migration. The public leaderboard is a security-invoker view over a private filtered source view. `bid_requests` has RLS with owner-only reads; direct client writes are revoked.
+- Configured the public Supabase URL and publishable key in Vercel production, preview, and development environments and in the local development environment.
+- Verified the database schema, migration history, RLS/policy grants, leaderboard query, Supabase security advisories, and Vercel builds.
+- Added unit tests for integer bid validation, overtaking increments, net reservations, and deterministic tie-breaking; 6 passed.
+- Added browser tests for filters/details, founder navigation, and mobile overflow; 2 passed in local Chromium.
 
-## In progress
+## Still to build
 
-- No Supabase project could be created: the selected organization is at its two active free-project limit. No existing database was modified.
-- No GitHub repository could be created yet: the connected GitHub integration can read repositories but has no create-repository action, and the in-app browser is currently signed out.
-- Authenticated founder flows, product submission forms, admin moderation, referral qualification, signed payment webhook fulfillment, and payment checkout remain to be implemented and verified.
+- Sign-in and account flows in the UI.
+- Founder submission, bid, wallet, history, and notification screens connected to the database functions.
+- Admin moderation and referral attribution/qualification/reward flows.
+- Payment checkout, signature-verified webhook fulfillment, and refund/chargeback handling. No payment provider is configured, so checkout stays disabled.
+- Database integration and concurrency tests with authenticated users; the public leaderboard currently has zero listings.
 
-## Next
+## Operating decisions
 
-- Sign in to GitHub in the open in-app browser so a private SaaslistAtlas repository can be created and the local project pushed.
-- Free up a Supabase free-project slot or enable a paid plan, then create `saaslistatlas` in the selected organization and apply the migration.
-- Wire Supabase Auth, verified product submission, founder balances/bids/history, and service-side subscription/payment/referral processing.
-- Link the repository to Vercel, configure public keys and server-only secrets, then deploy a preview.
-- Run database integration/concurrency tests against a disposable project and verify RLS and migrations.
-
-## Open questions
-
-- The Supabase project limit must be resolved before a database-backed account can be tested.
-- A live payment provider and merchant configuration are not present; checkout is deliberately disabled.
-- Private repository creation needs GitHub browser authentication.
-
-## Decisions
-
-- Start fresh after the user selected that option; no unrelated repositories or databases were repurposed.
-- Keep the new repository private by default.
-- Keep all public sample products and amounts clearly labeled as illustrative.
-- Keep package checkout, sign-in, and bidding unavailable until the real Supabase project and trusted payment setup exist.
-- Active standing-bid reservations stay reserved at every rank until the owner changes or withdraws that listing's bid, consistent with the brief's top-ten reservation rule.
-- Referral rewards qualify only after verification and a successful paid subscription; reward amount uses the referrer's plan at qualification. Proposed attribution window is 30 days.
-- A refund/chargeback must use a compensating ledger event; if earned/purchased credits are already reserved, future bids/rewards must be restricted rather than making a wallet negative. The enforcement flow is not yet wired.
+- Sample products and amounts remain clearly labeled as illustrative. The live database currently has no products.
+- Standing-bid reservations remain held at every rank until the owner changes or withdraws that listing's bid.
+- Referral rewards qualify only after verification and a successful paid subscription; the reward uses the referrer's plan at qualification.
+- Refunds and chargebacks require compensating ledger events. If existing credits are reserved, later bidding/rewards must be restricted instead of allowing a negative wallet.
+- Do not put service-role or payment secrets in `VITE_*` variables. Only the public URL and publishable key are configured on the frontend.
 
 ## Verification
 
-- `npm run build`: passed on 2026-10-23.
-- `npm test`: 6 passed on 2026-10-23.
-- `npm run test:e2e`: 2 passed on 2026-10-23 using Playwright Chromium because the in-app browser blocked localhost.
-- Desktop and mobile screenshots were compared against the image-generation concept; core nav, filters, details, ranking rules, and founder workspace were inspected.
-- Database migration: not applied or PostgreSQL-validated because no new Supabase project could be provisioned.
-- GitHub, Vercel, Supabase deployment/integration: not completed.
+- Local production build, unit tests, browser tests, and desktop/mobile visual review passed before remote setup.
+- Supabase migrations applied successfully; the database smoke query reports 12 public tables, 11 public tables with RLS, and an empty leaderboard.
+- The selected table `public.bid_requests` now has RLS enabled, owner-only read policy for authenticated users, no anonymous select, and no direct client write grants.
+- Supabase security advisors no longer report disabled RLS or a public security-definer leaderboard view. Remaining warnings include intentionally restricted service tables without policies and authenticated access to the bid/listing RPC functions.
+- Vercel’s production build completed successfully after connecting GitHub. Deployments retain the team's Vercel Authentication protection.
