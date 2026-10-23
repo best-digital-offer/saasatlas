@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowRight, Check, Compass, Plus, RefreshCw } from 'lucide-react'
+import { ArrowRight, Check, Compass, ImagePlus, Plus, RefreshCw, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 
 type WorkspacePayload = {
@@ -17,7 +17,7 @@ type WorkspacePayload = {
   wallet: { available: number; reserved: number; purchased_total: number; earned_total: number; spent_total: number } | null
   products: Array<{
     id: string; name: string; tagline: string; description: string; category: string; website_url: string
-    state: string; current_rank: number | null; previous_rank: number | null
+    state: string; logo_url: string | null; current_rank: number | null; previous_rank: number | null
     standing_bid: number | null; bid_state: string | null; last_withdrawn_at: string | null; created_at: string
   }>
   ledger: Array<{ id: string; source_type: string; credit_amount: number; available_delta: number; reserved_delta: number; reason: string; created_at: string }>
@@ -53,6 +53,8 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
   const [showForm, setShowForm] = useState(false)
   const [bidAmounts, setBidAmounts] = useState<Record<string, string>>({})
   const [form, setForm] = useState({ name: '', tagline: '', description: '', category: 'AI', website: '' })
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState('')
   const referralStats = useMemo(() => ({
     total: workspace.referrals.length,
     pending: workspace.referrals.filter((item) => item.state === 'pending').length,
@@ -94,15 +96,28 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
       const website = form.website.trim()
       const validUrl = new URL(website)
       if (validUrl.protocol !== 'https:') throw new Error('Enter an official website URL beginning with https://.')
+      let logoUrl: string | null = null
+      if (logoFile) {
+        const extension = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as Record<string, string>)[logoFile.type]
+        if (!extension) throw new Error('Choose a PNG, JPG, or WebP logo.')
+        if (logoFile.size > 2 * 1024 * 1024) throw new Error('Logo must be 2 MB or smaller.')
+        const path = `${userId}/${crypto.randomUUID()}.${extension}`
+        const { error: uploadError } = await supabase.storage.from('founder-product-logos').upload(path, logoFile, { contentType: logoFile.type, upsert: false })
+        if (uploadError) throw uploadError
+        logoUrl = supabase.storage.from('founder-product-logos').getPublicUrl(path).data.publicUrl
+      }
       const { error: createError } = await supabase.rpc('create_product_listing', {
         p_name: form.name.trim(),
         p_tagline: form.tagline.trim(),
         p_description: form.description.trim(),
         p_category: form.category,
         p_website_url: validUrl.toString(),
+        p_logo_url: logoUrl,
       })
       if (createError) throw createError
       setForm({ name: '', tagline: '', description: '', category: 'AI', website: '' })
+      setLogoFile(null)
+      setLogoPreview('')
       setShowForm(false)
       setNotice('Your listing is live. It was published automatically because your subscription is eligible.')
       await load()
@@ -156,11 +171,12 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
           <label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{['AI', 'Analytics', 'Design', 'Developer tools', 'Marketing', 'Productivity', 'Finance', 'Customer support', 'Security', 'Other'].map((category) => <option key={category}>{category}</option>)}</select></label>
           <label>Official HTTPS website<input required type="url" inputMode="url" placeholder="https://example.com" value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} /></label>
           <label className="listing-description">Description<textarea maxLength={5000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <div className="listing-form-actions"><button type="button" className="button button-light" onClick={() => setShowForm(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Publish listing'} <ArrowRight size={14} /></button></div>
+          <div className="listing-logo-field"><span className="listing-logo-label">Product logo <small>Optional · PNG, JPG, or WebP · up to 2 MB</small></span><label className="logo-upload-control">{logoPreview ? <img src={logoPreview} alt="Selected product logo preview" /> : <ImagePlus size={22} />}<span>{logoFile ? logoFile.name : 'Upload logo'}</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { setError('Choose a PNG, JPG, or WebP logo.'); event.target.value = ''; return } if (file.size > 2 * 1024 * 1024) { setError('Logo must be 2 MB or smaller.'); event.target.value = ''; return } setError(''); setLogoFile(file); setLogoPreview(URL.createObjectURL(file)) }} /></label>{logoFile && <button type="button" className="button button-light logo-remove" onClick={() => { setLogoFile(null); setLogoPreview('') }}><X size={13} /> Remove logo</button>}</div>
+          <div className="listing-form-actions"><button type="button" className="button button-light" onClick={() => { setShowForm(false); setLogoFile(null); setLogoPreview('') }}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Publish listing'} <ArrowRight size={14} /></button></div>
           <p className="listing-form-note">Listings publish automatically. The server strictly enforces your active subscription and its listing limit.</p>
         </form>}
         {workspace.products.length ? <div className="founder-products">{workspace.products.map((product) => <article className="founder-product-card" key={product.id}>
-          <div className="founder-product-main"><div><h3>{product.name}</h3><p>{product.tagline}</p><small>{product.category} · <a href={product.website_url} target="_blank" rel="noreferrer">{new URL(product.website_url).hostname}</a></small></div><span className={'state-pill state-' + product.state}>{prettyStatus(product.state)}</span></div>
+          <div className="founder-product-main">{product.logo_url && <img className="founder-product-logo" src={product.logo_url} alt={`${product.name} logo`} />}<div><h3>{product.name}</h3><p>{product.tagline}</p><small>{product.category} · <a href={product.website_url} target="_blank" rel="noreferrer">{new URL(product.website_url).hostname}</a></small></div><span className={'state-pill state-' + product.state}>{prettyStatus(product.state)}</span></div>
           <div className="founder-product-metrics"><span>Rank <strong>{product.current_rank ? '#' + product.current_rank : '—'}</strong></span><span>Standing bid <strong>{product.standing_bid ? product.standing_bid.toLocaleString() + ' credits' : 'No active bid'}</strong></span></div>
           {product.state === 'approved' && eligible && <div className="bid-editor"><label>New standing bid (credits)<input type="number" min="1" step="1" value={bidAmounts[product.id] ?? (product.standing_bid ? String(product.standing_bid) : '')} onChange={(event) => setBidAmounts({ ...bidAmounts, [product.id]: event.target.value })} placeholder="Enter integer credits" /></label><button className="button button-primary" disabled={saving || !bidAmounts[product.id] || !Number.isSafeInteger(Number(bidAmounts[product.id])) || Number(bidAmounts[product.id]) <= 0} onClick={() => void changeBid(product.id)}>{product.standing_bid ? 'Update bid' : 'Place bid'}</button>{product.bid_state === 'active' && <button className="button button-light" disabled={saving} onClick={() => void changeBid(product.id, true)}>Withdraw</button>}</div>}
         </article>)}</div> : <div className="workspace-empty"><span className="empty-emblem"><Compass size={22} /></span><h3>Your workspace starts here</h3><p>Your published listings and eligible standing bids will appear here.</p>{eligible && <button className="button button-primary" onClick={() => setShowForm(true)}><Plus size={14} /> Publish your first listing</button>}</div>}
