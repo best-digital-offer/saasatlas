@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
-  CircleHelp, Coins, Compass, ExternalLink, Filter, Layers3, Menu, Plus, Search, Sparkles,
-  Trophy, UsersRound, X,
+  CircleHelp, Compass, ExternalLink, Filter, Menu, Plus, Search, Sparkles,
+  Trophy, X,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
 import type { PublicLeaderboardRecord } from './lib/supabase'
@@ -109,8 +109,7 @@ function App() {
   }, [allProducts, category, query, sort, status, rankById])
 
   return (
-    <div className={`app-shell ${page === 'founder' ? 'founder-shell' : ''}`}>
-      {page === 'founder' && <div className="founder-background" aria-hidden="true" />}
+    <div className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setPage('discover')} aria-label="SaaslistAtlas home">
           <span className="brand-mark"><span /><span /><span /></span>
@@ -194,26 +193,13 @@ function App() {
 
 function FounderDashboard({ onSignIn, onHow }: { onSignIn: () => void; onHow: () => void }) {
   const [activeTab, setActiveTab] = useState('Your products')
-  const workspaceSections = [
-    { label: 'Your products', icon: Layers3 },
-    { label: 'Credit activity', icon: Coins },
-    { label: 'Referrals', icon: UsersRound },
-  ]
   return <main className="founder-page">
-    <aside className="founder-rail" aria-label="Founder workspace sections">
-      <div className="founder-rail-mark" aria-label="SaaslistAtlas"><span className="brand-mark"><span /><span /><span /></span></div>
-      <nav className="founder-rail-nav" aria-label="Workspace navigation">
-        {workspaceSections.map(({ label, icon: Icon }) => <button key={label} className={activeTab === label ? 'active' : ''} onClick={() => setActiveTab(label)} aria-label={label} aria-current={activeTab === label ? 'page' : undefined} title={label}><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>)}
-      </nav>
-      <button className="founder-rail-help" onClick={onHow} aria-label="How bidding works" title="How bidding works"><CircleHelp size={18} strokeWidth={1.8} /></button>
-    </aside>
-    <div className="founder-content">
     <div className="founder-title"><div><p className="founder-breadcrumb">Founder workspace <ChevronRight size={13} /> Overview</p><h1>Your founder workspace</h1><p className="founder-intro">Manage your listings and standing bids in one place.</p></div><button className="button button-primary" onClick={onSignIn}>Sign in to continue <ArrowRight size={15} /></button></div>
     <div className="preview-banner"><span className="preview-icon"><Sparkles size={16} /></span><div><strong>Preview mode</strong><span>This is a design preview. Sign in and connect the SaaslistAtlas database to view real account credits, listings, and bids.</span></div><button onClick={onHow}>How bidding works</button></div>
     <div className="balance-grid"><section className="balance-card"><span>Available credits</span><strong>—</strong><small>Sign in to view your balance</small></section><section className="balance-card"><span>Reserved for bids</span><strong>—</strong><small>Active standing bids</small></section><section className="balance-card"><span>Your current rank</span><strong>—</strong><small>Across eligible listings</small></section></div>
+    <div className="workspace-tabs">{['Your products', 'Credit activity', 'Referrals'].map((tab) => <button key={tab} className={activeTab === tab ? 'current' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>
     {activeTab === 'Your products' ? <section className="workspace-section"><div className="section-header"><div><h2>Your listings</h2><p>Your product standing bids and positions will appear here.</p></div><button className="button button-dark" onClick={onSignIn}><Plus size={15} /> Add a product</button></div><div className="workspace-empty"><span className="empty-emblem"><Compass size={22} /></span><h3>Your workspace starts here</h3><p>Sign in to manage listings, reserve credits, and see how your products rank.</p><button className="button button-primary" onClick={onSignIn}>Sign in to your account <ArrowRight size={15} /></button></div></section> : <section className="workspace-section"><div className="section-header"><div><h2>{activeTab}</h2><p>Available after you sign in and connect your account.</p></div></div><div className="workspace-empty compact"><span className="empty-emblem"><Trophy size={22} /></span><h3>Connect your account</h3><p>Your {activeTab.toLowerCase()} will show here once the database is configured.</p><button className="button button-primary" onClick={onSignIn}>Sign in <ArrowRight size={15} /></button></div></section>}
     <div className="reservation-explainer"><div className="reservation-icon"><Check size={17} /></div><div><strong>Your bid is a reservation, not a purchase.</strong><span>Credits stay yours while committed to a listing’s active standing bid. You can adjust or withdraw that bid under the published rules.</span></div><button onClick={onHow}>Read the rules <ArrowRight size={14} /></button></div>
-    </div>
   </main>
 }
 
