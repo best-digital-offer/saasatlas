@@ -8,22 +8,22 @@
 - Created Supabase project `saasatlas` in `ap-south-1`. The founder-owned product and bidding schema remains intact.
 - Added an isolated sourced catalog, source attribution and verification fields, RLS, run/item history, service-role-only bounded ingestion, duplicate checks, and admin-only moderation RPC.
 - Imported 300 products from the ComparEdge CC BY 4.0 public feed after checking official URLs: AI 80, Marketing 50, Developer tools 45, Productivity 35, Design and content 30, Business and finance 25, Customer support and e-commerce 20, Security and infrastructure 15.
-- Database outcome: 278 pending, 22 needs review because another listing shares their official domain, zero exact duplicates, zero failed inserts, zero approved/published.
+- Import outcome before publication: 278 pending, 22 flagged because another listing shares their official domain, zero exact duplicates, and zero failed inserts.
+- At the owner's explicit direction, published all 300 without individual review. Each row records `moderation_authority = 'owner_directed'`; none gained founder ownership or bidding eligibility.
+- Connected the public directory to `published_catalog_products`. Founder leaderboard and catalog listings remain separate.
 - Configured the product and pricing URLs plus verification timestamps where verified. Provider attribution and source URLs are retained. Ratings, reviews, and numeric prices were not imported.
 
 ## In progress
 
 - Sign-in and account flows in the UI.
 - Founder submission, bid, wallet, history, and notification screens connected to database functions.
-- Admin review interface and setup of a real administrator account. No account existed in Supabase at import time, so all sourced entries remain unpublished.
+- Admin review interface and setup of a real administrator account for future individually reviewed catalog updates.
 - Referral attribution/qualification/reward flows.
 - Payment checkout, signature-verified webhook fulfillment, and refund/chargeback handling. No provider is configured, so checkout stays disabled.
-- Catalog browse UI integration and owner-directed publication: the public directory reads the approved-only `published_catalog_products` view. All 300 sourced products were published at the owner's direction without individual review; they remain separate from founder-owned, ranked, and bid-eligible products.
 
 ## Next
 
-- Create or designate a real administrator account, then review pending and same-domain entries before publication.
-- Connect the separate approved catalog view to a catalog browsing experience when requested.
+- Create or designate a real administrator account for future individual moderation actions.
 - Add integration and concurrency tests with authenticated users and a disposable Supabase branch.
 
 ## Open questions
