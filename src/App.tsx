@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
+  ArrowRight, Check, ChevronDown, ChevronRight,
   Compass, ExternalLink, Menu, Plus, Search, Sparkles,
   Trophy, X, Zap, LoaderCircle,
 } from 'lucide-react'
