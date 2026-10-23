@@ -32,7 +32,7 @@
 ## Verification
 
 - Local production build, unit tests, browser tests, and desktop/mobile visual review passed before remote setup.
-- Supabase migrations applied successfully; the database smoke query reports 12 public tables, 11 public tables with RLS, and an empty leaderboard.
+- Supabase migrations applied successfully; the database smoke query reports 12 public tables, all 12 with RLS, and an empty leaderboard.
 - The selected table `public.bid_requests` now has RLS enabled, owner-only read policy for authenticated users, no anonymous select, and no direct client write grants.
 - Supabase security advisors no longer report disabled RLS or a public security-definer leaderboard view. Remaining warnings include intentionally restricted service tables without policies and authenticated access to the bid/listing RPC functions.
 - Vercel’s production build completed successfully after connecting GitHub. Deployments retain the team's Vercel Authentication protection.
