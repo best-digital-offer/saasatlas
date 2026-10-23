@@ -297,7 +297,7 @@ function App() {
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   
-                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Bid for a position with ${product.name}`}><Zap size={14} /> Bid for a position</button>}
+                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Pay ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><Zap size={14} /> Pay {minimum.toLocaleString()} credits for position #{targetRank}</button> })() : <span className="directory-action">Outside top 100</span>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
