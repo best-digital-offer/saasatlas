@@ -51,6 +51,7 @@ function App() {
   const [selected, setSelected] = useState<Product | null>(null)
   const [dialog, setDialog] = useState<'how' | 'submit' | 'signin' | null>(null)
   const [mobileMenu, setMobileMenu] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [status, setStatus] = useState('All active')
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
@@ -122,7 +123,7 @@ function App() {
         </nav>
         {page === 'discover' ? (
           <div className="header-actions">
-            <label className="searchbox"><Search size={16} /><input aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => setQuery(event.target.value)} /><kbd>/</kbd></label>
+            <label className={`searchbox ${mobileSearchOpen ? 'mobile-search-open' : ''}`} onClick={() => { if (window.innerWidth <= 700 && !mobileSearchOpen) setMobileSearchOpen(true) }}><Search size={16} /><input autoFocus={mobileSearchOpen} aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }} /><kbd>/</kbd></label>
             <button className="text-button login-button" onClick={() => setDialog('signin')}>Log in</button>
             <button className="button button-primary submit-button" onClick={() => setDialog('submit')}>Submit a product</button>
           </div>
@@ -138,7 +139,7 @@ function App() {
             <button className="ranking-note" onClick={() => setDialog('how')}><span>How ranking works <ArrowRight size={15} /></span><small>Rankings are based on credit-backed<br className="desktop-only" /> standing bids from verified founders.</small></button>
           </div>
 
-          <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Leaderboard unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
+          <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — be the first founder to list a product.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Leaderboard unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
 
           <div className="filter-row">
             <div className="category-tabs" role="tablist" aria-label="Filter by category">
@@ -160,7 +161,12 @@ function App() {
                   <span className="bid-value">{product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   <span className={`movement ${product.movement > 0 ? 'up' : product.movement < 0 ? 'down' : 'steady'}`}>{product.movement > 0 ? <ArrowUpRight size={15} /> : product.movement < 0 ? <ArrowDownRight size={15} /> : <span className="movement-dash">—</span>}{product.movement ? <span>{Math.abs(product.movement)}</span> : null}</span>
                 </button>
-              }) : <div className="empty-state"><Search size={20} /><strong>No products found</strong><span>Try another search or category.</span><button onClick={() => { setQuery(''); setCategory('All products') }}>Clear filters</button></div>}
+              }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
+                {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
+                <strong>{dataState === 'live' && liveProducts.length === 0 ? 'The leaderboard starts here' : 'No products found'}</strong>
+                <span>{dataState === 'live' && liveProducts.length === 0 ? 'Be the first founder to introduce a product to SaaslistAtlas.' : 'Try another search or category.'}</span>
+                <button onClick={() => dataState === 'live' && liveProducts.length === 0 ? setDialog('submit') : (setQuery(''), setCategory('All products'))}>{dataState === 'live' && liveProducts.length === 0 ? 'Submit the first product' : 'Clear filters'}</button>
+              </div>}
               <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `${products.length} directory listings`}</span><button onClick={() => { setCategory('All products'); setQuery(''); setStatus('All active'); setSort('rank') }}>Clear filters <X size={13} /></button></div>
             </div>
             <aside className="top-ten-panel">
@@ -168,7 +174,7 @@ function App() {
               <div className="top-ten-list">{allProducts.filter((product) => {
                 const rank = rankById.get(product.id)
                 return rank !== null && rank !== undefined && rank <= 10
-              }).map((product, index) => <button key={product.id} className={`top-ten-row ${index === 0 ? 'leader' : ''}`} onClick={() => setSelected(product)}><span className="mini-rank">{String(rankById.get(product.id) ?? index + 1).padStart(2, '0')}</span><Logo product={product} small /><strong>{product.name}</strong><span className="mini-bid">{product.credits}<small> credits</small></span></button>)}</div>
+              }).map((product, index) => <button key={product.id} className={`top-ten-row ${index === 0 ? 'leader' : ''}`} onClick={() => setSelected(product)}><span className="mini-rank">{String(rankById.get(product.id) ?? index + 1).padStart(2, '0')}</span><Logo product={product} small /><strong>{product.name}</strong><span className="mini-bid">{product.credits}<small> credits</small></span></button>)}{dataState === 'live' && liveProducts.length === 0 && <p className="top-ten-empty">Founder-backed listings will appear here.</p>}</div>
               <div className="tie-note"><CircleHelp size={14} /><span>Equal bids keep the position earned first.</span></div>
             </aside>
           </section>
