@@ -1,6 +1,8 @@
 -- Add target-rank bidding while preserving highest-standing-bid ordering.
 -- Unbid eligible founder listings remain at the end of the ranked founder list.
 
+alter table public.bid_requests add column target_rank integer check (target_rank between 1 and 100);
+
 create or replace view public.public_leaderboard as
 select
   p.id,
@@ -157,8 +159,8 @@ begin
 
   perform pg_advisory_xact_lock(hashtextextended('saaslistatlas-leaderboard', 0));
 
-  insert into public.bid_requests(owner_id, idempotency_key, product_id, requested_amount)
-  values (v_owner, p_idempotency_key, p_product_id, p_amount)
+  insert into public.bid_requests(owner_id, idempotency_key, product_id, requested_amount, target_rank)
+  values (v_owner, p_idempotency_key, p_product_id, p_amount, p_target_rank)
   on conflict do nothing;
 
   select * into v_request
@@ -169,7 +171,7 @@ begin
   if v_request.result is not null then
     return v_request.result;
   end if;
-  if v_request.product_id <> p_product_id or v_request.requested_amount <> p_amount then
+  if v_request.product_id <> p_product_id or v_request.requested_amount <> p_amount or v_request.target_rank <> p_target_rank then
     raise exception using errcode = '22023', message = 'Idempotency key was already used for a different request';
   end if;
 
