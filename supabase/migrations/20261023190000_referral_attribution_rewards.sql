@@ -49,6 +49,7 @@ declare
 begin
   -- Only a paid, active subscription qualifies; trialing and pending accounts do not.
   if new.subscription_status <> 'active'
+     or new.email_verified_at is null
      or (new.subscription_valid_until is not null and new.subscription_valid_until <= v_now) then
     return new;
   end if;
@@ -122,10 +123,10 @@ $$;
 
 drop trigger if exists user_account_paid_referral_reward on public.user_accounts;
 create trigger user_account_paid_referral_reward
-after update of subscription_status, subscription_valid_until
+after update of subscription_status, subscription_valid_until, email_verified_at
 on public.user_accounts
 for each row
-when (new.subscription_status = 'active')
+when (new.subscription_status = 'active' and new.email_verified_at is not null)
 execute function public.reward_referrer_after_paid_subscription();
 
 revoke all on function public.reward_referrer_after_paid_subscription() from public, anon, authenticated;
