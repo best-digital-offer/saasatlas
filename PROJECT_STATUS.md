@@ -18,7 +18,7 @@
 - Admin review interface and setup of a real administrator account. No account existed in Supabase at import time, so all sourced entries remain unpublished.
 - Referral attribution/qualification/reward flows.
 - Payment checkout, signature-verified webhook fulfillment, and refund/chargeback handling. No provider is configured, so checkout stays disabled.
-- Catalog browse UI integration. The approved-only `published_catalog_products` view is ready; this task did not change the UI or leaderboard.
+- Catalog browse UI integration and owner-directed publication: the public directory reads the approved-only `published_catalog_products` view. All 300 sourced products were published at the owner's direction without individual review; they remain separate from founder-owned, ranked, and bid-eligible products.
 
 ## Next
 

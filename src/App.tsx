@@ -5,7 +5,7 @@ import {
   Trophy, X,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
-import type { PublicLeaderboardRecord } from './lib/supabase'
+import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
 
 type Product = {
   id: string
@@ -18,6 +18,14 @@ type Product = {
   tone: string
   website: string
   currentRank?: number | null
+  isCatalog?: boolean
+  sourceProvider?: string
+  sourceUrl?: string
+  attributionText?: string
+  verifiedAt?: string
+  pricingModel?: string | null
+  pricingUrl?: string | null
+  pricingVerifiedAt?: string | null
 }
 
 const sampleProducts: Product[] = [
@@ -35,7 +43,7 @@ const sampleProducts: Product[] = [
   { id: 'quietform', name: 'Quietform', tagline: 'Forms people actually finish.', category: 'Analytics', credits: 36, movement: 0, symbol: 'Q', tone: 'slate', website: 'quietform.example' },
 ]
 
-const categories = ['All products', 'AI', 'Analytics', 'Design', 'Developer tools', 'Marketing', 'Productivity', 'Finance']
+const commonCategories = ['AI', 'Analytics', 'Design', 'Developer tools', 'Marketing', 'Productivity', 'Finance']
 const sampleRankById = new Map(sampleProducts.map((product, index) => [product.id, index + 1]))
 const tones = ['midnight', 'blue', 'ink', 'sky', 'coral', 'mint', 'lavender', 'amber', 'teal', 'rose', 'slate']
 
@@ -54,6 +62,7 @@ function App() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [status, setStatus] = useState('All active')
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
 
   useEffect(() => {
@@ -61,14 +70,19 @@ function App() {
     if (!client) return
     let cancelled = false
     const loadLeaderboard = async () => {
-      const { data, error } = await client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false })
+      const [leaderboardResult, catalogResult] = await Promise.all([
+        client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
+        client.from('published_catalog_products').select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at').order('name'),
+      ])
       if (cancelled) return
-      if (error) {
+      if (leaderboardResult.error || catalogResult.error) {
         setDataState('error')
         setLiveProducts([])
+        setCatalogProducts([])
         return
       }
-      const rows = (data ?? []) as PublicLeaderboardRecord[]
+      const rows = (leaderboardResult.data ?? []) as PublicLeaderboardRecord[]
+      const sourcedRows = (catalogResult.data ?? []) as PublicCatalogProductRecord[]
       setLiveProducts(rows.map((row, index) => {
         const rank = row.current_rank
         const previousRank = row.previous_rank
@@ -85,6 +99,26 @@ function App() {
           currentRank: rank,
         }
       }))
+      setCatalogProducts(sourcedRows.map((row, index) => ({
+        id: `catalog-${row.id}`,
+        name: row.name,
+        tagline: row.description,
+        category: row.category,
+        credits: 0,
+        movement: 0,
+        symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
+        tone: tones[(index + rows.length) % tones.length],
+        website: row.canonical_url,
+        currentRank: null,
+        isCatalog: true,
+        sourceProvider: row.source_provider,
+        sourceUrl: row.source_url,
+        attributionText: row.attribution_text,
+        verifiedAt: row.verified_at,
+        pricingModel: row.pricing_model,
+        pricingUrl: row.pricing_url,
+        pricingVerifiedAt: row.pricing_verified_at,
+      })))
       setDataState('live')
     }
     void loadLeaderboard()
@@ -92,7 +126,8 @@ function App() {
     return () => { cancelled = true; window.clearInterval(refreshTimer) }
   }, [])
 
-  const allProducts = dataState === 'live' ? liveProducts : dataState === 'preview' ? sampleProducts : []
+  const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
+  const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
   const rankById = new Map(allProducts.map((product, index) => [product.id,
     product.currentRank !== undefined ? product.currentRank : sampleRankById.get(product.id) ?? index + 1]))
 
@@ -135,11 +170,11 @@ function App() {
       {page === 'discover' ? (
         <main className="page-content">
           <div className="page-heading">
-            <div><h1>The SaaS leaderboard</h1><p>Discover the tools founders are backing.</p></div>
+            <div><h1>The SaaS directory</h1><p>Explore verified tools and see which products founders are backing.</p></div>
             <button className="ranking-note" onClick={() => setDialog('how')}><span>How ranking works <ArrowRight size={15} /></span><small>Rankings are based on credit-backed<br className="desktop-only" /> standing bids from verified founders.</small></button>
           </div>
 
-          <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — be the first founder to list a product.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Leaderboard unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
+          <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && catalogProducts.length > 0 ? <><strong>Curated SaaS directory</strong> — {catalogProducts.length} sourced tools, with founder bids and rankings shown separately.</> : dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — approved products will appear here as they are published.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
 
           <div className="filter-row">
             <div className="category-tabs" role="tablist" aria-label="Filter by category">
@@ -158,7 +193,7 @@ function App() {
                   <span className="rank-number">{rank ? String(rank).padStart(2, '0') : '—'}</span>
                   <span className="product-identity"><Logo product={product} /><span className="product-copy"><strong>{product.name}</strong><small>{product.tagline}</small></span></span>
                   <span className="product-category">{product.category}</span>
-                  <span className="bid-value">{product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
+                  <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   <span className={`movement ${product.movement > 0 ? 'up' : product.movement < 0 ? 'down' : 'steady'}`}>{product.movement > 0 ? <ArrowUpRight size={15} /> : product.movement < 0 ? <ArrowDownRight size={15} /> : <span className="movement-dash">—</span>}{product.movement ? <span>{Math.abs(product.movement)}</span> : null}</span>
                 </button>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
@@ -174,7 +209,7 @@ function App() {
               <div className="top-ten-list">{allProducts.filter((product) => {
                 const rank = rankById.get(product.id)
                 return rank !== null && rank !== undefined && rank <= 10
-              }).map((product, index) => <button key={product.id} className={`top-ten-row ${index === 0 ? 'leader' : ''}`} onClick={() => setSelected(product)}><span className="mini-rank">{String(rankById.get(product.id) ?? index + 1).padStart(2, '0')}</span><Logo product={product} small /><strong>{product.name}</strong><span className="mini-bid">{product.credits}<small> credits</small></span></button>)}{dataState === 'live' && liveProducts.length === 0 && <p className="top-ten-empty">Founder-backed listings will appear here.</p>}</div>
+              }).filter((product) => !product.isCatalog).map((product, index) => <button key={product.id} className={`top-ten-row ${index === 0 ? 'leader' : ''}`} onClick={() => setSelected(product)}><span className="mini-rank">{String(rankById.get(product.id) ?? index + 1).padStart(2, '0')}</span><Logo product={product} small /><strong>{product.name}</strong><span className="mini-bid">{product.credits}<small> credits</small></span></button>)}{dataState === 'live' && !allProducts.some((product) => !product.isCatalog && (rankById.get(product.id) ?? 99) <= 10) && <p className="top-ten-empty">Founder-backed listings will appear here.</p>}</div>
               <div className="tie-note"><CircleHelp size={14} /><span>Equal bids keep the position earned first.</span></div>
             </aside>
           </section>
@@ -205,7 +240,7 @@ function FounderDashboard({ onSignIn, onHow }: { onSignIn: () => void; onHow: ()
 
 function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Product; rank: number | null; onClose: () => void; onBid: () => void; preview: boolean }) {
   const websiteUrl = product.website.startsWith('https://') ? product.website : `https://${product.website}`
-  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog product-dialog" role="dialog" aria-modal="true" aria-labelledby="product-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><div className="dialog-product-head"><Logo product={product} /><div><span className="sample-kicker">{preview ? 'Illustrative preview listing' : 'Directory listing'}</span><h2 id="product-dialog-title">{product.name}</h2><span>{product.category}</span></div></div><p className="dialog-tagline">{product.tagline}</p><div className="detail-stats"><div><span>Current position</span><strong>{rank ? `#${String(rank).padStart(2, '0')}` : '—'}</strong></div><div><span>Standing bid</span><strong>{product.credits > 0 ? product.credits : '—'} <small>{product.credits > 0 ? 'credits' : ''}</small></strong></div><div><span>Movement</span><strong className={product.movement > 0 ? 'text-green' : product.movement < 0 ? 'text-red' : ''}>{product.movement > 0 ? `↑ ${product.movement}` : product.movement < 0 ? `↓ ${Math.abs(product.movement)}` : '—'}</strong></div></div><p className="detail-disclaimer">{preview ? 'This listing and its bid are sample data for the interface preview. No live bidding is taking place.' : 'Ranks reflect current eligible standing bids. A bid reservation remains active until changed or withdrawn.'}</p><div className="dialog-actions"><a className="button button-light" href={websiteUrl} target={preview ? undefined : '_blank'} rel="noreferrer" onClick={preview ? (event) => event.preventDefault() : undefined}>Visit website <ExternalLink size={14} /></a><button className="button button-primary" onClick={onBid}>Back this product <ArrowRight size={14} /></button></div></section></div>
+  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog product-dialog" role="dialog" aria-modal="true" aria-labelledby="product-dialog-title"><button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button><div className="dialog-product-head"><Logo product={product} /><div><span className="sample-kicker">{preview ? 'Illustrative preview listing' : product.isCatalog ? 'Sourced directory listing' : 'Founder leaderboard listing'}</span><h2 id="product-dialog-title">{product.name}</h2><span>{product.category}</span></div></div><p className="dialog-tagline">{product.tagline}</p><div className="detail-stats"><div><span>Current position</span><strong>{rank ? `#${String(rank).padStart(2, '0')}` : '—'}</strong></div><div><span>{product.isCatalog ? 'Pricing model' : 'Standing bid'}</span><strong>{product.isCatalog ? product.pricingModel ?? 'Not listed' : product.credits > 0 ? product.credits : '—'} <small>{!product.isCatalog && product.credits > 0 ? 'credits' : ''}</small></strong></div><div><span>Movement</span><strong className={product.movement > 0 ? 'text-green' : product.movement < 0 ? 'text-red' : ''}>{product.movement > 0 ? `↑ ${product.movement}` : product.movement < 0 ? `↓ ${Math.abs(product.movement)}` : '—'}</strong></div></div><p className="detail-disclaimer">{product.isCatalog ? <>Sourced from <a href={product.sourceUrl} target="_blank" rel="noreferrer">{product.sourceProvider}</a>. {product.attributionText} Verified {product.verifiedAt ? new Date(product.verifiedAt).toLocaleDateString() : 'date unavailable'}.{product.pricingUrl && <> Pricing details: <a href={product.pricingUrl} target="_blank" rel="noreferrer">official pricing page</a>{product.pricingVerifiedAt ? ` (checked ${new Date(product.pricingVerifiedAt).toLocaleDateString()})` : ''}.</>}</> : preview ? 'This listing and its bid are sample data for the interface preview. No live bidding is taking place.' : 'Ranks reflect current eligible standing bids. A bid reservation remains active until changed or withdrawn.'}</p><div className="dialog-actions"><a className="button button-light" href={websiteUrl} target={preview ? undefined : '_blank'} rel="noreferrer" onClick={preview ? (event) => event.preventDefault() : undefined}>Visit website <ExternalLink size={14} /></a>{!product.isCatalog && <button className="button button-primary" onClick={onBid}>Back this product <ArrowRight size={14} /></button>}</div></section></div>
 }
 
 function InfoDialog({ type, onClose, onSignIn }: { type: 'how' | 'submit' | 'signin'; onClose: () => void; onSignIn: () => void }) {

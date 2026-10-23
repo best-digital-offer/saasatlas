@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-The directory uses clearly labeled illustrative sample data when no Supabase project is configured. Founder-owned products and the credit-backed leaderboard remain empty until founders submit eligible products. Sourced directory records live separately in `catalog_products`; 300 currently await moderation and are not published to the leaderboard. If a configured database cannot be reached, the application shows an unavailable state instead of passing sample bids off as real.
+The directory uses clearly labeled illustrative sample data when no Supabase project is configured. Founder-owned products and the credit-backed leaderboard remain empty until founders submit eligible products. Sourced directory records live separately in `catalog_products`; the public directory reads approved entries from `published_catalog_products`, while the credit-backed leaderboard remains founder-only. If a configured database cannot be reached, the application shows an unavailable state instead of passing sample bids off as real.
 
 ## Configure Supabase
 
@@ -22,7 +22,7 @@ Do not place a service-role key or payment secret in a `VITE_*` variable. Checko
 
 ## Catalog imports
 
-The import path never inserts sourced records into founder-owned `products`. It uses the separate `catalog_products` table, so catalog moderation cannot create an account, change a founder's listing, or make a product eligible to bid. Imported records start as `pending`; same-domain candidates are retained as `needs_review`. Only an administrator can approve or reject them with `review_catalog_product`. Approved catalog entries are exposed through `published_catalog_products`, not the bidding leaderboard.
+The import path never inserts sourced records into founder-owned `products`. It uses the separate `catalog_products` table, so catalog publication cannot create an account, change a founder's listing, or make a product eligible to bid. Imported records start as `pending`; same-domain candidates are retained as `needs_review`. Individual review uses the admin-gated `review_catalog_product` RPC. An owner-directed publication is separately marked in `moderation_authority` and does not claim an individual moderator reviewed the entry. Approved catalog entries appear in the public directory, not the bidding leaderboard.
 
 The initial import used ComparEdge's public `llms-tools.json` feed. The provider publishes this data under CC BY 4.0; attribution is stored with each row as “Data from ComparEdge (CC BY 4.0)” and its source URL. Ratings, review content, popularity figures, and numerical prices are not imported. Official homepages and available pricing URLs are checked directly over HTTPS before a row is eligible for the import. Site checks that return an error or block the request are excluded rather than bypassed.
 

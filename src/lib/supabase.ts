@@ -18,3 +18,20 @@ export type PublicLeaderboardRecord = {
   current_rank: number | null
   previous_rank: number | null
 }
+
+export type PublicCatalogProductRecord = {
+  id: string
+  name: string
+  slug: string
+  canonical_url: string
+  description: string
+  category: string
+  subcategory: string | null
+  pricing_model: string | null
+  pricing_url: string | null
+  pricing_verified_at: string | null
+  source_provider: string
+  source_url: string
+  attribution_text: string
+  verified_at: string
+}
