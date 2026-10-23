@@ -9,7 +9,6 @@ import type { Session } from '@supabase/supabase-js'
 import AuthDialog from './AuthDialog'
 import FounderWorkspace from './FounderWorkspace'
 import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
-import { rankTargetCredits } from './lib/rank-targets'
 
 type Product = {
   id: string
@@ -212,7 +211,6 @@ function App() {
   }
 
   const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
-  const rankingProducts = dataState === 'live' ? [...liveProducts].sort((a, b) => (a.currentRank ?? 999999) - (b.currentRank ?? 999999)) : sampleProducts
   const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
   const rankById = new Map(allProducts.map((product, index) => [product.id,
     product.currentRank !== undefined ? product.currentRank : sampleRankById.get(product.id) ?? index + 1]))
@@ -260,7 +258,7 @@ function App() {
         <main className="page-content">
           <div className="page-heading">
             <div><h1>The SaaS directory</h1><p>Explore verified tools and see which products founders are backing.</p></div>
-            <button className="ranking-note" onClick={() => setRankGuideOpen(true)} aria-label="View bid targets and choose a rank"><span><Target size={16} /> Bid for a position <ArrowRight size={15} /></span><small><strong>1,770 credits</strong> for rank 1 · targets step down by 180 credits.</small></button>
+            
           </div>
 
           <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && catalogProducts.length > 0 ? <><strong>Curated SaaS directory</strong> — {catalogProducts.length} sourced tools, with founder bids and rankings shown separately.</> : dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — approved products will appear here as they are published.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
@@ -292,7 +290,7 @@ function App() {
                 <span>{dataState === 'live' && liveProducts.length === 0 ? 'Be the first founder to introduce a product to SaaslistAtlas.' : 'Try another search or category.'}</span>
                 <button onClick={() => dataState === 'live' && liveProducts.length === 0 ? setDialog('submit') : (setQuery(''), setCategory('All products'))}>{dataState === 'live' && liveProducts.length === 0 ? 'Submit the first product' : 'Clear filters'}</button>
               </div>}
-              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `${products.length} directory listings`}</span><button onClick={() => { setCategory('All products'); setQuery(''); setStatus('All active'); setSort('rank') }}>Clear filters <X size={13} /></button></div>
+              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `${products.length} directory listings`}</span><button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div>
             </div>
 
           </section>
