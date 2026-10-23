@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
+  ArrowRight, Check, ChevronDown, ChevronRight,
   Compass, ExternalLink, Menu, Plus, Search, Sparkles,
   Trophy, X, Zap, LoaderCircle,
 } from 'lucide-react'
@@ -192,7 +192,7 @@ function App() {
       })
       if (error) throw error
       const bidResult = data as { rank?: number; additional_reserved?: number; released_credits?: number } | null
-      setBidNotice(bidResult?.rank ? `Bid accepted. Your product is now #${bidResult.rank}.` : 'Bid accepted. The leaderboard has been updated.')
+      setBidNotice(bidResult?.rank ? `Standing bid accepted. Your listing is now #${bidResult.rank}.` : 'Standing bid accepted. The leaderboard has been updated.')
       const [{ data: rows, error: rowsError }, { data: freshWorkspace }] = await Promise.all([
         supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
         supabase.rpc('get_founder_workspace'),
@@ -277,7 +277,7 @@ function App() {
           <section className="leaderboard-layout single-column" aria-label="SaaS leaderboard">
             <div className="results-column">
               <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
-              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span>Rank movement</span><span>Action</span></div>
+              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span>Standing bid</span><span aria-hidden="true"></span></div>
               {products.length ? products.map((product) => {
                 const rank = rankById.get(product.id) ?? null
                 return <div className="product-row" key={product.id}>
@@ -285,8 +285,8 @@ function App() {
                   <button className="product-identity" onClick={() => setSelected(product)} aria-label={`View ${product.name}, rank ${rank}`}><Logo product={product} /><span className="product-copy"><strong>{product.name}</strong><small>{product.tagline}</small></span></button>
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
-                  <span className={`movement ${product.movement > 0 ? 'up' : product.movement < 0 ? 'down' : 'steady'}`}>{product.movement > 0 ? <ArrowUpRight size={15} /> : product.movement < 0 ? <ArrowDownRight size={15} /> : <span className="movement-dash">—</span>}{product.movement ? <span>{Math.abs(product.movement)}</span> : null}</span>
-                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Boost ${product.name}`}><Zap size={14} /> Boost</button>}
+                  
+                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Place standing bid for ${product.name}`}><Zap size={14} /> Place standing bid</button>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
@@ -336,7 +336,7 @@ function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Pr
       <div className="detail-stats">
         <div><span>Current position</span><strong>{rank ? `#${String(rank).padStart(2, '0')}` : '—'}</strong></div>
         <div><span>{product.isCatalog ? 'Pricing model' : 'Standing bid'}</span><strong>{product.isCatalog ? product.pricingModel ?? 'Not listed' : product.credits > 0 ? product.credits : '—'} <small>{!product.isCatalog && product.credits > 0 ? 'credits' : ''}</small></strong></div>
-        <div><span>Movement</span><strong className={product.movement > 0 ? 'text-green' : product.movement < 0 ? 'text-red' : ''}>{product.movement > 0 ? `↑ ${product.movement}` : product.movement < 0 ? `↓ ${Math.abs(product.movement)}` : '—'}</strong></div>
+        
       </div>
       <p className="detail-disclaimer">{product.isCatalog ? <>
         {product.descriptionSourceUrl ? <>Description checked against the <a href={product.descriptionSourceUrl} target="_blank" rel="noreferrer">official product page</a>{product.descriptionVerifiedAt ? ` on ${new Date(product.descriptionVerifiedAt).toLocaleDateString()}` : ''}. </> : <>Description provided by ComparEdge under CC BY 4.0. </>}
@@ -374,8 +374,8 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, amount
   return <div className="overlay" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget) onClose()}}>
     <section className="dialog inline-bid-card" role="dialog" aria-modal="true" aria-labelledby="inline-bid-title">
       <button className="close-button" onClick={onClose} aria-label="Close"><X size={18}/></button>
-      <span className="sample-kicker">Live standing bid</span>
-      <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Boost {product.name}</h3><p>Bid here without leaving the leaderboard.</p></div></div>
+      <span className="sample-kicker">Live standing bid · position can change</span>
+      <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Place a standing bid</h3><p>{product.name} · bid without leaving the leaderboard.</p></div></div>
       <div className="inline-bid-rank">
         <div className="inline-bid-stat"><span>Current rank</span><strong>{product.currentRank ? '#'+product.currentRank : 'Unranked'}</strong></div>
         <div className="inline-bid-stat"><span>Current bid</span><strong>{currentBid.toLocaleString()} cr</strong></div>
@@ -383,12 +383,12 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, amount
       </div>
       {session ? <>
         {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for bidding.</div>}
-        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">New total standing bid (credits)</label><input id="inline-bid-amount" type="number" min="1" step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
-        <p className="inline-bid-helper">This is the new total bid, not an extra top-up. {extra.toLocaleString()} additional credits would be reserved (if positive); any reduction releases the difference. The server checks minimums and balance before accepting.</p>
-      </> : <><p className="inline-bid-signin">Sign in to reserve credits and bid on your product right here.</p></>}
+        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Your total standing bid (credits)</label><input id="inline-bid-amount" type="number" min="1" step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
+        <p className="inline-bid-helper">Enter the total number of credits you want committed to this listing, not an extra top-up. {extra.toLocaleString()} additional credits would be reserved if your bid increases; reducing your bid releases the difference.</p><div className="standing-bid-duration"><strong>How long will your position last?</strong><p>Your bid has no fixed time limit. It stays active until you change or withdraw it, or your listing becomes ineligible. If another eligible listing places a higher standing bid, your listing automatically moves down the rankings. A higher bid can overtake yours at any time.</p><p><strong>Paying credits does not guarantee a permanent position.</strong> Rankings update as eligible standing bids change.</p></div>
+      </> : <><p className="inline-bid-signin">Sign in to reserve credits and place a standing bid on this listing.</p></>}
       {error && <div className="inline-bid-message error" role="alert">{error}</div>}
       {notice && <div className="inline-bid-message notice" role="status">{notice}</div>}
-      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : 'Confirm bid'}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
+      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : `Pay ${next.toLocaleString()} credits for this position`}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
     </section>
   </div>
 }
