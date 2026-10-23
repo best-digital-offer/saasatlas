@@ -182,7 +182,7 @@ function App() {
         <main className="page-content">
           <div className="page-heading">
             <div><h1>The SaaS directory</h1><p>Explore verified tools and see which products founders are backing.</p></div>
-            <button className="ranking-note" onClick={() => setDialog('how')}><span>How ranking works <ArrowRight size={15} /></span><small>Rankings are based on credit-backed<br className="desktop-only" /> standing bids from verified founders.</small></button>
+            <button className="ranking-note" onClick={() => setRankGuideOpen(true)} aria-label="View bid targets and choose a rank"><span><Target size={16} /> Bid for a position <ArrowRight size={15} /></span><small><strong>1,770 credits</strong> for rank 1 · targets step down by 180 credits.</small></button>
           </div>
 
           <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && catalogProducts.length > 0 ? <><strong>Curated SaaS directory</strong> — {catalogProducts.length} sourced tools, with founder bids and rankings shown separately.</> : dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — approved products will appear here as they are published.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
