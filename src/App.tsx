@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight,
-  CircleHelp, Compass, ExternalLink, Filter, Menu, Plus, Search, Sparkles,
-  Target, Trophy, X,
+  Compass, ExternalLink, Menu, Plus, Search, Sparkles,
+  Trophy, X, Zap, LoaderCircle,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 import AuthDialog from './AuthDialog'
 import FounderWorkspace from './FounderWorkspace'
 import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
-import { rankTargetCredits } from './lib/rank-targets'
 
 type Product = {
   id: string
@@ -56,7 +55,7 @@ const sampleRankById = new Map(sampleProducts.map((product, index) => [product.i
 const tones = ['midnight', 'blue', 'ink', 'sky', 'coral', 'mint', 'lavender', 'amber', 'teal', 'rose', 'slate']
 
 function Logo({ product, small = false }: { product: Product; small?: boolean }) {
-  return <span aria-hidden="true" className={`product-mark ${product.tone} ${small ? 'small' : ''}`}>{product.symbol}{product.logoUrl && <img src={product.logoUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none' }} />}</span>
+  return <span aria-hidden="true" className={`product-mark ${product.tone} ${small ? 'small' : ''}`}>{product.logoUrl ? <img src={product.logoUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none' }} /> : product.symbol}</span>
 }
 
 function App() {
@@ -65,16 +64,30 @@ function App() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('rank')
   const [selected, setSelected] = useState<Product | null>(null)
-  const [rankGuideOpen, setRankGuideOpen] = useState(false)
-  const [rankTarget, setRankTarget] = useState(1)
+  const [bidTarget, setBidTarget] = useState<Product | null>(null)
+  const [bidInput, setBidInput] = useState('')
+  const [bidSubmitting, setBidSubmitting] = useState(false)
+  const [bidError, setBidError] = useState('')
+  const [bidNotice, setBidNotice] = useState('')
+  const [workspacePayload, setWorkspacePayload] = useState<{account?: {email_verified_at: string | null; subscription_status: string; subscription_valid_until: string | null; grace_period_ends_at: string | null}; wallet?: {available: number; reserved: number}} | null>(null)
   const [dialog, setDialog] = useState<'how' | 'submit' | 'signin' | null>(null)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-  const [status, setStatus] = useState('All active')
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
   const [session, setSession] = useState<Session | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function readWorkspace() {
+      if (!supabase || !session) { setWorkspacePayload(null); return }
+      const { data, error } = await supabase.rpc('get_founder_workspace')
+      if (!cancelled && !error && data) setWorkspacePayload(data as typeof workspacePayload)
+    }
+    void readWorkspace()
+    return () => { cancelled = true }
+  }, [session])
 
   useEffect(() => {
     if (!supabase) return
@@ -115,6 +128,7 @@ function App() {
           symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
           tone: tones[index % tones.length],
           website: row.website_url,
+          logoUrl: row.logo_url,
           currentRank: rank,
         }
       }))
@@ -149,6 +163,57 @@ function App() {
     return () => { cancelled = true; window.clearInterval(refreshTimer) }
   }, [])
 
+
+
+  function openBidModal(product: Product) {
+    if (product.isCatalog) return
+    if (!session) { setDialog('signin'); return }
+    setBidError('')
+    setBidNotice('')
+    setBidTarget(product)
+    const current = product.credits ?? 0
+    const highestOther = liveProducts.filter((candidate) => candidate.id !== product.id).reduce((top, candidate) => Math.max(top, candidate.credits), 0)
+    const min = Math.max(5, highestOther > 0 ? highestOther + 5 : 5)
+    setBidInput(String(current > 0 ? Math.max(current + 5, min) : min))
+  }
+
+  async function submitInlineBid() {
+    if (!supabase || !session || !bidTarget) return
+    setBidError('')
+    setBidNotice('')
+    const amount = Number(bidInput)
+    if (!Number.isSafeInteger(amount) || amount <= 0) { setBidError('Enter a whole number of credits.'); return }
+    setBidSubmitting(true)
+    try {
+      const { data, error } = await supabase.rpc('place_or_update_bid', {
+        p_product_id: bidTarget.id,
+        p_amount: amount,
+        p_idempotency_key: crypto.randomUUID(),
+      })
+      if (error) throw error
+      const bidResult = data as { rank?: number; additional_reserved?: number; released_credits?: number } | null
+      setBidNotice(bidResult?.rank ? `Bid accepted. Your product is now #${bidResult.rank}.` : 'Bid accepted. The leaderboard has been updated.')
+      const [{ data: rows, error: rowsError }, { data: freshWorkspace }] = await Promise.all([
+        supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
+        supabase.rpc('get_founder_workspace'),
+      ])
+      if (!rowsError) {
+        setLiveProducts(((rows ?? []) as PublicLeaderboardRecord[]).map((row, index) => ({
+          id: row.id, name: row.name, tagline: row.tagline, category: row.category,
+          credits: row.standing_bid ?? 0, movement: row.current_rank && row.previous_rank ? row.previous_rank - row.current_rank : 0,
+          symbol: row.name.trim().slice(0, 1).toUpperCase() || '•', tone: tones[index % tones.length],
+          website: row.website_url, logoUrl: row.logo_url, currentRank: row.current_rank,
+        })))
+      }
+      if (freshWorkspace) setWorkspacePayload(freshWorkspace as typeof workspacePayload)
+      setBidTarget((previous) => previous ? ({ ...previous, credits: amount, currentRank: bidResult?.rank ?? previous.currentRank }) : previous)
+    } catch (cause) {
+      setBidError(cause instanceof Error ? cause.message : 'Bid was not accepted.')
+    } finally {
+      setBidSubmitting(false)
+    }
+  }
+
   const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
   const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
   const rankById = new Map(allProducts.map((product, index) => [product.id,
@@ -158,13 +223,16 @@ function App() {
     const filtered = allProducts.filter((product) => {
       const matchesCategory = category === 'All products' || product.category === category
       const text = `${product.name} ${product.tagline} ${product.category}`.toLowerCase()
-      const withinStatus = status === 'All active' || (status === 'Top 10 only' && (rankById.get(product.id) ?? 99) <= 10)
-      return matchesCategory && withinStatus && text.includes(query.toLowerCase())
+      return matchesCategory && text.includes(query.toLowerCase())
+    })
+    if (sort === 'rank') filtered.sort((a, b) => {
+      if (a.isCatalog !== b.isCatalog) return a.isCatalog ? 1 : -1
+      return (a.currentRank ?? 999999) - (b.currentRank ?? 999999)
     })
     if (sort === 'credits') filtered.sort((a, b) => b.credits - a.credits)
     if (sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name))
     return filtered
-  }, [allProducts, category, query, sort, status, rankById])
+  }, [allProducts, category, query, sort, rankById])
 
   return (
     <div className="app-shell">
@@ -194,7 +262,7 @@ function App() {
         <main className="page-content">
           <div className="page-heading">
             <div><h1>The SaaS directory</h1><p>Explore verified tools and see which products founders are backing.</p></div>
-            <button className="ranking-note" onClick={() => setRankGuideOpen(true)} aria-label="View bid targets and choose a rank"><span><Target size={16} /> Bid for a position <ArrowRight size={15} /></span><small><strong>1,770 credits</strong> for rank 1 · targets step down by 180 credits.</small></button>
+            
           </div>
 
           <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && catalogProducts.length > 0 ? <><strong>Curated SaaS directory</strong> — {catalogProducts.length} sourced tools, with founder bids and rankings shown separately.</> : dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — approved products will appear here as they are published.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
@@ -203,10 +271,10 @@ function App() {
             <div className="category-tabs" role="tablist" aria-label="Filter by category">
               {categories.map((item) => <button key={item} role="tab" aria-selected={category === item} className={category === item ? 'selected' : ''} onClick={() => setCategory(item)}>{item}</button>)}
             </div>
-            <label className="select-wrap"><Filter size={14} /><select aria-label="Filter listing status" value={status} onChange={(event) => setStatus(event.target.value)}><option>All active</option><option>Top 10 only</option></select><ChevronDown size={14} /></label>
+            
           </div>
 
-          <section className="leaderboard-layout" aria-label="SaaS leaderboard">
+          <section className="leaderboard-layout single-column" aria-label="SaaS leaderboard">
             <div className="results-column">
               <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
               <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span>Rank movement</span><span>Action</span></div>
@@ -218,7 +286,7 @@ function App() {
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   <span className={`movement ${product.movement > 0 ? 'up' : product.movement < 0 ? 'down' : 'steady'}`}>{product.movement > 0 ? <ArrowUpRight size={15} /> : product.movement < 0 ? <ArrowDownRight size={15} /> : <span className="movement-dash">—</span>}{product.movement ? <span>{Math.abs(product.movement)}</span> : null}</span>
-                  <button className="product-boost" onClick={() => { setRankTarget(Math.min(10, Math.max(1, rank ?? 1))); setRankGuideOpen(true) }} aria-label={`Boost your listing toward rank ${Math.min(10, Math.max(1, rank ?? 1))}`}><ArrowUpRight size={14} /> Boost</button>
+                  {product.isCatalog ? <button className="product-boost" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>Details <ArrowRight size={14} /></button> : <button className="product-boost" onClick={() => openBidModal(product)} aria-label={`Boost ${product.name}`}><Zap size={14} /> Boost</button>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
@@ -226,16 +294,9 @@ function App() {
                 <span>{dataState === 'live' && liveProducts.length === 0 ? 'Be the first founder to introduce a product to SaaslistAtlas.' : 'Try another search or category.'}</span>
                 <button onClick={() => dataState === 'live' && liveProducts.length === 0 ? setDialog('submit') : (setQuery(''), setCategory('All products'))}>{dataState === 'live' && liveProducts.length === 0 ? 'Submit the first product' : 'Clear filters'}</button>
               </div>}
-              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `${products.length} directory listings`}</span><button onClick={() => { setCategory('All products'); setQuery(''); setStatus('All active'); setSort('rank') }}>Clear filters <X size={13} /></button></div>
+              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `${products.length} directory listings`}</span><button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div>
             </div>
-            <aside className="top-ten-panel">
-              <div className="top-ten-heading"><h2>Top 10</h2><div className="top-ten-actions"><button className="rank-bid-link" onClick={() => setRankGuideOpen(true)}><Target size={13} /> Bid to rank</button><button onClick={() => { setCategory('All products'); setQuery('') }}>All active <ChevronRight size={15} /></button></div></div>
-              <div className="top-ten-list">{allProducts.filter((product) => {
-                const rank = rankById.get(product.id)
-                return rank !== null && rank !== undefined && rank <= 10
-              }).filter((product) => !product.isCatalog).map((product, index) => <button key={product.id} className={`top-ten-row ${index === 0 ? 'leader' : ''}`} onClick={() => setSelected(product)}><span className="mini-rank">{String(rankById.get(product.id) ?? index + 1).padStart(2, '0')}</span><Logo product={product} small /><strong>{product.name}</strong><span className="mini-bid">{product.credits}<small> credits</small></span></button>)}{dataState === 'live' && !allProducts.some((product) => !product.isCatalog && (rankById.get(product.id) ?? 99) <= 10) && <p className="top-ten-empty">Founder-backed listings will appear here.</p>}</div>
-              <div className="tie-note"><CircleHelp size={14} /><span>Equal bids keep the position earned first.</span></div>
-            </aside>
+
           </section>
 
           <footer className="site-footer"><div className="footer-brand"><span className="brand-mark"><span /><span /><span /></span> Saaslist<span>Atlas</span></div><span>Find your next favorite tool.</span><div className="footer-links"><button onClick={() => setDialog('how')}>How it works</button><button onClick={() => setDialog('submit')}>Submit a product</button></div><small>© 2026 SaaslistAtlas</small></footer>
@@ -246,14 +307,8 @@ function App() {
         <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />
       )}
 
-      {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { setSelected(null); setRankGuideOpen(true) }} preview={dataState !== 'live'} />}
-      {rankGuideOpen && <RankTargetDialog
-        selectedRank={rankTarget}
-        onSelectRank={setRankTarget}
-        rankedBids={liveProducts.filter((product) => product.currentRank !== null && product.currentRank !== undefined && product.credits > 0)}
-        onClose={() => setRankGuideOpen(false)}
-        onContinue={() => { setRankGuideOpen(false); if (session) setPage('founder'); else setDialog('signin') }}
-      />}
+      {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openBidModal(target) }} preview={dataState !== 'live'} />}
+      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
       {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
@@ -297,40 +352,43 @@ function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Pr
   </div>
 }
 
-function RankTargetDialog({ selectedRank, onSelectRank, rankedBids, onClose, onContinue }: {
-  selectedRank: number
-  onSelectRank: (rank: number) => void
-  rankedBids: Product[]
-  onClose: () => void
-  onContinue: () => void
+function InlineBidDialog({ product, session, wallet, account, currentBid, amount, setAmount, submitting, error, notice, onClose, onSubmit, onSignIn }: {
+  product: Product
+  session: Session | null
+  wallet: {available:number; reserved:number} | null
+  account: {email_verified_at:string|null; subscription_status:string; subscription_valid_until:string|null; grace_period_ends_at:string|null} | null
+  currentBid: number
+  amount: string
+  setAmount: (value:string)=>void
+  submitting: boolean
+  error: string
+  notice: string
+  onClose: ()=>void
+  onSubmit: ()=>void
+  onSignIn: ()=>void
 }) {
-  const ranked = [...rankedBids].sort((a, b) => (a.currentRank ?? 999) - (b.currentRank ?? 999))
-  const target = rankTargetCredits[selectedRank - 1]
-  const currentPosition = ranked.find((product) => product.currentRank === selectedRank)
-  const targetCredits = Math.max(target.credits, currentPosition ? currentPosition.credits + 5 : 0)
-
-  return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <section className="dialog rank-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="rank-guide-title">
-      <button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
-      <span className="rank-guide-icon"><Target size={18} /></span>
-      <span className="sample-kicker">Standing bid guide</span>
-      <h2 id="rank-guide-title">Choose a rank to aim for</h2>
-      <p className="rank-guide-intro">Choose a target for your own approved founder listing. The #1 guide starts at 1,770 credits and steps down by rank.</p>
-      <div className="rank-target-grid" role="list" aria-label="Suggested bids by rank">
-        {rankTargetCredits.map(({ rank, credits }) => {
-          const current = ranked.find((product) => product.currentRank === rank)
-          const amount = Math.max(credits, current ? current.credits + 5 : 0)
-          return <button key={rank} role="listitem" className={`rank-target-option ${rank === selectedRank ? 'selected' : ''}`} onClick={() => onSelectRank(rank)} aria-pressed={rank === selectedRank}>
-            <span>Rank <strong>#{rank}</strong></span><b>{amount.toLocaleString()}<small> cr</small></b>{current && <em>Current: {current.credits.toLocaleString()}</em>}
-          </button>
-        })}
+  const next = Number(amount)
+  const extra = Math.max(0, next - currentBid)
+  const eligible = Boolean(account?.email_verified_at && ['active','trialing'].includes(account.subscription_status)
+    && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
+  return <div className="overlay" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget) onClose()}}>
+    <section className="dialog inline-bid-card" role="dialog" aria-modal="true" aria-labelledby="inline-bid-title">
+      <button className="close-button" onClick={onClose} aria-label="Close"><X size={18}/></button>
+      <span className="sample-kicker">Live standing bid</span>
+      <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Boost {product.name}</h3><p>Bid here without leaving the leaderboard.</p></div></div>
+      <div className="inline-bid-rank">
+        <div className="inline-bid-stat"><span>Current rank</span><strong>{product.currentRank ? '#'+product.currentRank : 'Unranked'}</strong></div>
+        <div className="inline-bid-stat"><span>Current bid</span><strong>{currentBid.toLocaleString()} cr</strong></div>
+        <div className="inline-bid-stat"><span>Available credits</span><strong>{wallet ? wallet.available.toLocaleString() : '—'}</strong></div>
       </div>
-      <div className="rank-guide-summary">
-        <div><span>Suggested bid for rank #{selectedRank}</span><strong>{targetCredits.toLocaleString()} <small>credits</small></strong></div>
-        <p>{currentPosition ? `The current #${selectedRank} bid is ${currentPosition.credits.toLocaleString()} credits. The guide adjusts above it.` : 'Guide amount only. Your confirmed rank depends on all active bids when your bid is accepted.'}</p>
-      </div>
-      <div className="rank-guide-notice"><CircleHelp size={15} /><span>Live bids require your own published founder listing, a verified account, an eligible subscription, and available credits. Sourced directory products cannot be bid on.</span></div>
-      <div className="dialog-actions rank-guide-actions"><button className="button button-light" onClick={onClose}>Close</button><button className="button button-primary" onClick={onContinue}>Continue to bid <ArrowRight size={14} /></button></div>
+      {session ? <>
+        {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for bidding.</div>}
+        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">New total standing bid (credits)</label><input id="inline-bid-amount" type="number" min="1" step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
+        <p className="inline-bid-helper">This is the new total bid, not an extra top-up. {extra.toLocaleString()} additional credits would be reserved (if positive); any reduction releases the difference. The server checks minimums and balance before accepting.</p>
+      </> : <><p className="inline-bid-signin">Sign in to reserve credits and bid on your product right here.</p></>}
+      {error && <div className="inline-bid-message error" role="alert">{error}</div>}
+      {notice && <div className="inline-bid-message notice" role="status">{notice}</div>}
+      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : 'Confirm bid'}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
     </section>
   </div>
 }
