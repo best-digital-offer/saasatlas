@@ -44,6 +44,7 @@ declare
   v_referral public.referrals%rowtype;
   v_referrer_plan public.plan_tier;
   v_reward integer;
+  v_ledger_id uuid;
   v_rules public.credit_rules%rowtype;
   v_now timestamptz := clock_timestamp();
 begin
@@ -87,16 +88,8 @@ begin
     return new;
   end if;
 
-  update public.credit_accounts
-    set available = available + v_reward,
-        earned_total = earned_total + v_reward,
-        updated_at = v_now
-    where owner_id = v_referral.referrer_id;
-
-  if not found then
-    raise exception using errcode = 'P0002', message = 'Referrer credit account is missing';
-  end if;
-
+  -- Insert the idempotency record first. Only credit the wallet when this transaction
+  -- actually created the ledger row; otherwise a retried event could mint credits.
   insert into public.credit_ledger(
     owner_id, referral_id, source_type, source_id, idempotency_key,
     credit_amount, available_delta, reserved_delta, reason, audit_metadata
@@ -106,7 +99,20 @@ begin
     'Referral reward after paid subscription',
     jsonb_build_object('referred_user_id', new.id, 'referrer_plan', v_referrer_plan::text)
   )
-  on conflict (owner_id, idempotency_key) do nothing;
+  on conflict (owner_id, idempotency_key) do nothing
+  returning id into v_ledger_id;
+
+  if v_ledger_id is not null then
+    update public.credit_accounts
+      set available = available + v_reward,
+          earned_total = earned_total + v_reward,
+          updated_at = v_now
+      where owner_id = v_referral.referrer_id;
+
+    if not found then
+      raise exception using errcode = 'P0002', message = 'Referrer credit account is missing';
+    end if;
+  end if;
 
   update public.referrals
     set state = 'rewarded',
