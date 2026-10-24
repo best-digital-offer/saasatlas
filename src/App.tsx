@@ -218,36 +218,35 @@ function App() {
   async function openSpotBid(targetRank: number) {
     const spot = Math.min(100, Math.max(1, targetRank))
     if (!session) { setDialog('signin'); return }
-    if (!supabase) { setBidError('Bidding is temporarily unavailable.'); return }
+    if (!supabase) { setBidError('Bidding is temporarily unavailable. Please refresh and try again.'); return }
     setBidError('')
     setBidNotice('')
     const { data, error } = await supabase
       .from('products')
-      .select('id,name,tagline,category,website_url,logo_url')
+      .select('id,name,tagline,category,website_url,logo_url,created_at')
       .eq('owner_id', session.user.id)
       .eq('state', 'approved')
       .eq('participates', true)
+      .order('created_at', { ascending: true })
       .limit(20)
     if (error) {
-      setBidError('Could not load your eligible listings. Please try again.')
+      console.error('Unable to load eligible listings for spot bid', error)
+      setBidError('We could not load your eligible listings. Please refresh the page and try again.')
       return
     }
-    const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null}>
-    if (!owned.length) {
-      setBidNotice('')
-      setDialog('submit')
-      return
-    }
-    const chosen = owned[0]
-    const currentBid = liveProducts.find((product) => product.id === chosen.id)?.credits ?? 0
+    const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null;created_at:string}>
+    if (!owned.length) { setDialog('submit'); return }
+    const chosen = owned.find((item) => liveProducts.some((product) => product.id === item.id)) ?? owned[0]
+    const current = liveProducts.find((product) => product.id === chosen.id)
+    const currentBid = current?.credits ?? 0
     const product: Product = {
       id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
       credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
-      tone: 'blue', website: chosen.website_url ?? '', logoUrl: chosen.logo_url, currentRank: null,
+      tone: 'blue', website: chosen.website_url ?? '', logoUrl: chosen.logo_url, currentRank: current?.currentRank ?? null,
     }
     setBidTarget(product)
     setBidTargetRank(spot)
-    setBidInput(String(getMinimumBidForRank(product.id, spot)))
+    setBidInput(String(Math.max(currentBid > 0 ? currentBid + 5 : 0, getMinimumBidForRank(product.id, spot))))
   }
 
   async function submitInlineBid() {
