@@ -221,37 +221,29 @@ function App() {
     if (!supabase) { setBidError('Bidding is temporarily unavailable. Please refresh and try again.'); return }
     setBidError('')
     setBidNotice('')
-    const { data, error } = await supabase
-      .from('products')
-      .select('id,name,tagline,category,website_url,logo_url,created_at')
-      .eq('owner_id', session.user.id)
-      .eq('state', 'approved')
-      .eq('participates', true)
-      .order('created_at', { ascending: true })
-      .limit(20)
-    if (error) {
-      console.error('Unable to load eligible listings for spot bid', error)
-      setBidError('We could not load your eligible listings. Please refresh the page and try again. If this continues, check your approved listing and account permissions.')
+    // Use the existing SECURITY DEFINER workspace RPC rather than a direct products SELECT,
+    // which can be blocked by product-table RLS for an otherwise eligible founder.
+    const { data: workspaceData, error } = await supabase.rpc('get_founder_workspace')
+    if (error || !workspaceData) {
+      console.error('Unable to load founder workspace for spot bid', error)
+      setBidError(`Could not load your founder workspace: ${error?.message ?? 'no workspace data returned'}. Please refresh and try again.`)
       setBidTarget({
         id: 'spot-bid-unavailable', name: 'Spot bidding', tagline: 'Unable to load your eligible founder listing.',
         category: 'Other', credits: 0, movement: 0, symbol: 'S', tone: 'blue', website: '', currentRank: null,
       })
       setBidTargetRank(spot)
-      setBidInput('')
+      setBidInput(String(Math.max(getMinimumBidForRank('', spot), 1)))
       return
     }
-    const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null;created_at:string}>
+    const workspace = workspaceData as {
+      products?: Array<{id:string;name:string;tagline?:string;category?:string;website_url?:string;logo_url?:string|null;state?:string;current_rank?:number|null;standing_bid?:number|null;created_at?:string}>
+    }
+    const owned = (workspace.products ?? []).filter((item) => item.state === 'approved')
     if (!owned.length) { setDialog('submit'); return }
     const chosen = owned.find((item) => liveProducts.some((product) => product.id === item.id)) ?? owned[0]
     const current = liveProducts.find((product) => product.id === chosen.id)
-    // Look up the founder listing independently of the top-100 in-memory list so ranks below #100 are not shown as unranked.
-    const { data: rankRecord } = await supabase
-      .from('public_leaderboard')
-      .select('current_rank,standing_bid')
-      .eq('id', chosen.id)
-      .maybeSingle()
-    const currentBid = Number(rankRecord?.standing_bid ?? current?.credits ?? 0)
-    const currentRank = rankRecord?.current_rank ?? current?.currentRank ?? null
+    const currentBid = Number(chosen.standing_bid ?? current?.credits ?? 0)
+    const currentRank = chosen.current_rank ?? current?.currentRank ?? null
     const product: Product = {
       id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
       credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
