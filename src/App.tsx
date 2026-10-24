@@ -222,7 +222,7 @@ function App() {
     setBidNotice('')
     const { data, error } = await supabase
       .from('products')
-      .select('id,name,tagline,category,website_url,logo_url,standing_bids(amount)')
+      .select('id,name,tagline,category,website_url,logo_url')
       .eq('owner_id', session.user.id)
       .eq('state', 'approved')
       .eq('participates', true)
@@ -231,14 +231,14 @@ function App() {
       setBidError('Could not load your eligible listings. Please try again.')
       return
     }
-    const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null;standing_bids?:{amount:number}[]|null}>
+    const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null}>
     if (!owned.length) {
       setBidNotice('')
       setDialog('submit')
       return
     }
     const chosen = owned[0]
-    const currentBid = chosen.standing_bids?.[0]?.amount ?? 0
+    const currentBid = liveProducts.find((product) => product.id === chosen.id)?.credits ?? 0
     const product: Product = {
       id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
       credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
