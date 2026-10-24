@@ -194,13 +194,13 @@ function App() {
 
 
   function getMinimumBidForRank(productId: string, targetRank: number) {
-    const highestCompetingBid = liveProducts
-      .filter((candidate) => candidate.id !== productId && candidate.credits > 0)
+    const highestBid = liveProducts
+      .filter((candidate) => candidate.credits > 0 && (targetRank > 1 || candidate.id !== productId))
       .reduce((highest, candidate) => Math.max(highest, candidate.credits), 0)
     // Each target spot is priced five credits below the leading standing bid.
-    // Position #1 requires outbidding the current leader; lower positions use the published spot ladder.
-    if (targetRank <= 1) return highestCompetingBid + 5
-    return Math.max(5, highestCompetingBid - ((targetRank - 1) * 5))
+    // Position #1 requires outbidding a competing leader; lower positions use the published spot ladder.
+    if (targetRank <= 1) return highestBid + 5
+    return Math.max(5, highestBid - ((targetRank - 1) * 5))
   }
 
   function openBidModal(product: Product) {
