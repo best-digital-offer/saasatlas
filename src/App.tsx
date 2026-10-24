@@ -458,6 +458,17 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
     && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
   return <div className="overlay" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget) onClose()}}>
     <section className="dialog inline-bid-card" role="dialog" aria-modal="true" aria-labelledby="inline-bid-title">
+      <style>{`
+        .inline-bid-card { max-height: min(88dvh, 760px); display: flex; flex-direction: column; overflow: hidden; }
+        .inline-bid-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 2px 8px 0; }
+        .inline-bid-actions { flex-shrink: 0; position: sticky; bottom: 0; z-index: 2; background: var(--surface, #fff); padding-top: 12px; }
+        @media (max-width: 600px) {
+          .inline-bid-card { width: min(100%, 520px); max-height: 88dvh; padding: 18px; }
+          .inline-bid-actions { display: grid; grid-template-columns: 1fr; }
+          .inline-bid-actions .button { width: 100%; }
+        }
+      `}</style>
+      <div className="inline-bid-scroll">
       <button className="close-button" onClick={onClose} aria-label="Close"><X size={18}/></button>
       <span className="sample-kicker">Live standing bid · position can change</span>
       <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Place a standing bid</h3><p>{product.name} · bid without leaving the leaderboard.</p></div></div>
@@ -474,6 +485,7 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
       </> : <><p className="inline-bid-signin">Sign in to reserve credits and place a standing bid on this listing.</p></>}
       {error && <div className="inline-bid-message error" role="alert">{error}</div>}
       {notice && <div className="inline-bid-message notice" role="status">{notice}</div>}
+      </div>
       <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<minimumBid || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : `Pay ${next.toLocaleString()} credits to reach #${targetRank} or higher`}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
     </section>
   </div>
