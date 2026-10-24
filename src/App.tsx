@@ -78,7 +78,7 @@ function App() {
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [catalogHasMore, setCatalogHasMore] = useState(false)
   const [catalogLoadingMore, setCatalogLoadingMore] = useState(false)
-  const [catalogOffset, setCatalogOffset] = useState(100)
+  const [catalogOffset, setCatalogOffset] = useState(25)
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
   const [session, setSession] = useState<Session | null>(null)
 
@@ -141,7 +141,7 @@ function App() {
     const loadInitialCatalog = async () => {
       const { data, error } = await client.from('published_catalog_products')
         .select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at')
-        .order('name').range(0, 99)
+        .order('name').range(0, 24)
       if (cancelled) return
       if (error) { setCatalogHasMore(false); return }
       const rows = (data ?? []) as PublicCatalogProductRecord[]
@@ -156,7 +156,7 @@ function App() {
         seoPath: `/products/${row.slug}/`,
       })))
       setCatalogOffset(rows.length)
-      setCatalogHasMore(rows.length === 100)
+      setCatalogHasMore(rows.length === 25)
     }
     void loadInitialCatalog()
     return () => { cancelled = true }
@@ -170,7 +170,7 @@ function App() {
     try {
       const { data, error } = await client.from('published_catalog_products')
         .select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at')
-        .order('name').range(start, start + 99)
+        .order('name').range(start, start + 24)
       if (error) throw error
       const rows = (data ?? []) as PublicCatalogProductRecord[]
       setCatalogProducts(previous => [...previous, ...rows.map((row, index) => ({
@@ -184,7 +184,7 @@ function App() {
         seoPath: `/products/${row.slug}/`,
       }))])
       setCatalogOffset(start + rows.length)
-      setCatalogHasMore(rows.length === 100)
+      setCatalogHasMore(rows.length === 25)
     } catch (error) {
       console.error('Unable to load more catalog products', error)
     } finally {
@@ -332,7 +332,7 @@ function App() {
                 <span>{dataState === 'live' && liveProducts.length === 0 ? 'Be the first founder to introduce a product to SaaslistAtlas.' : 'Try another search or category.'}</span>
                 <button onClick={() => dataState === 'live' && liveProducts.length === 0 ? setDialog('submit') : (setQuery(''), setCategory('All products'))}>{dataState === 'live' && liveProducts.length === 0 ? 'Submit the first product' : 'Clear filters'}</button>
               </div>}
-              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `Showing ${catalogProducts.length} catalog products loaded`}</span><div className="table-footer-actions">{catalogHasMore && <button className="load-more-button" onClick={() => void loadMoreCatalogProducts()} disabled={catalogLoadingMore}>{catalogLoadingMore ? <><LoaderCircle size={14} /> Loading…</> : <>Load next 100 products <ArrowRight size={14} /></>}</button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div></div>
+              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `Showing ${catalogProducts.length} catalog products loaded`}</span><div className="table-footer-actions">{catalogHasMore && <button className="load-more-button" onClick={() => void loadMoreCatalogProducts()} disabled={catalogLoadingMore}>{catalogLoadingMore ? <><LoaderCircle size={14} /> Loading…</> : <>Load 25 more products <ArrowRight size={14} /></>}</button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div></div>
             </div>
 
           </section>
