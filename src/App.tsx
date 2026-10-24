@@ -194,12 +194,13 @@ function App() {
 
 
   function getMinimumBidForRank(productId: string, targetRank: number) {
-    const others = liveProducts
-      .filter((candidate) => candidate.id !== productId)
-      .slice()
-      .sort((a, b) => (a.currentRank ?? 999999) - (b.currentRank ?? 999999))
-    const rowAtTarget = others[targetRank - 1]
-    return rowAtTarget && rowAtTarget.credits > 0 ? rowAtTarget.credits + 5 : 5
+    const highestCompetingBid = liveProducts
+      .filter((candidate) => candidate.id !== productId && candidate.credits > 0)
+      .reduce((highest, candidate) => Math.max(highest, candidate.credits), 0)
+    // Each target spot is priced five credits below the leading standing bid.
+    // Position #1 requires outbidding the current leader; lower positions use the published spot ladder.
+    if (targetRank <= 1) return highestCompetingBid + 5
+    return Math.max(5, highestCompetingBid - ((targetRank - 1) * 5))
   }
 
   function openBidModal(product: Product) {
@@ -246,7 +247,7 @@ function App() {
     }
     setBidTarget(product)
     setBidTargetRank(spot)
-    setBidInput(String(Math.max(currentBid + 5, getMinimumBidForRank(product.id, spot))))
+    setBidInput(String(getMinimumBidForRank(product.id, spot)))
   }
 
   async function submitInlineBid() {
@@ -360,9 +361,9 @@ function App() {
                   <span className="rank-number">{rank ? String(rank).padStart(2, '0') : '—'}</span>
                   <button className="product-identity" onClick={() => setSelected(product)} aria-label={`View ${product.name}, rank ${rank}`}><Logo product={product} /><span className="product-copy"><strong>{product.name}</strong><small>{product.tagline}</small></span></button>
                   <span className="product-category">{product.category}</span>
-                  <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
+                  <span className="bid-value">{product.isCatalog ? <><strong>{getMinimumBidForRank('', rank ?? 1).toLocaleString()}</strong> <small>credits to bid</small></> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   
-                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, rank ?? productIndex + 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>List to compete</span><strong>Promote your product</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
+                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, rank ?? productIndex + 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>Bid for #{rank ?? productIndex + 1}</span><strong>{getMinimumBidForRank('', rank ?? productIndex + 1).toLocaleString()} credits</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
@@ -384,7 +385,7 @@ function App() {
       )}
 
       {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openBidModal(target) }} preview={dataState !== 'live'} />}
-      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} targetRank={bidTargetRank} setTargetRank={(rank) => { setBidTargetRank(rank); setBidInput(String(Math.max(bidTarget.credits + 5, getMinimumBidForRank(bidTarget.id, rank)))) }} minimumBid={getMinimumBidForRank(bidTarget.id, bidTargetRank)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
+      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} targetRank={bidTargetRank} setTargetRank={(rank) => { setBidTargetRank(rank); setBidInput(String(getMinimumBidForRank(bidTarget.id, rank))) }} minimumBid={getMinimumBidForRank(bidTarget.id, bidTargetRank)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
       {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
