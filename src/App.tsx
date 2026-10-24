@@ -289,8 +289,12 @@ function App() {
 
   const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
   const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
+  const activeBidCount = liveProducts.filter((product) => product.credits > 0).length
+  const catalogRankById = new Map(catalogProducts.map((product, index) => [product.id, activeBidCount + index + 1]))
   const rankById = new Map(allProducts.map((product, index) => [product.id,
-    product.currentRank !== undefined ? product.currentRank : sampleRankById.get(product.id) ?? index + 1]))
+    product.isCatalog
+      ? catalogRankById.get(product.id) ?? null
+      : product.currentRank !== undefined ? product.currentRank : sampleRankById.get(product.id) ?? index + 1]))
 
   const products = useMemo(() => {
     const filtered = allProducts.filter((product) => {
@@ -298,10 +302,9 @@ function App() {
       const text = `${product.name} ${product.tagline} ${product.category}`.toLowerCase()
       return matchesCategory && text.includes(query.toLowerCase())
     })
-    if (sort === 'rank') filtered.sort((a, b) => {
-      if (a.isCatalog !== b.isCatalog) return a.isCatalog ? 1 : -1
-      return (a.currentRank ?? 999999) - (b.currentRank ?? 999999)
-    })
+    if (sort === 'rank') filtered.sort((a, b) =>
+      (rankById.get(a.id) ?? 999999) - (rankById.get(b.id) ?? 999999)
+    )
     if (sort === 'credits') filtered.sort((a, b) => b.credits - a.credits)
     if (sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name))
     return filtered
@@ -338,7 +341,7 @@ function App() {
             
           </div>
 
-          <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && catalogProducts.length > 0 ? <><strong>Curated SaaS directory</strong> — {catalogProducts.length} sourced tools, with founder bids and rankings shown separately.</> : dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — approved products will appear here as they are published.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
+          <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && catalogProducts.length > 0 ? <><strong>Unified SaaS rankings</strong> — {catalogProducts.length} sourced tools rank after active founder bids; unbid founder listings follow the catalog.</> : dataState === 'live' && liveProducts.length === 0 ? <><strong>The directory is open</strong> — approved products will appear here as they are published.</> : dataState === 'live' ? <><strong>Live directory</strong> — rankings and standing bids loaded from SaaslistAtlas.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
 
           <div className="filter-row">
             <div className="category-tabs" role="tablist" aria-label="Filter by category">
@@ -359,7 +362,7 @@ function App() {
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   
-                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, productIndex + 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>List to compete</span><strong>Promote your product</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
+                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, rank ?? productIndex + 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>List to compete</span><strong>Promote your product</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
@@ -367,7 +370,7 @@ function App() {
                 <span>{dataState === 'live' && liveProducts.length === 0 ? 'Be the first founder to introduce a product to SaaslistAtlas.' : 'Try another search or category.'}</span>
                 <button onClick={() => dataState === 'live' && liveProducts.length === 0 ? setDialog('submit') : (setQuery(''), setCategory('All products'))}>{dataState === 'live' && liveProducts.length === 0 ? 'Submit the first product' : 'Clear filters'}</button>
               </div>}
-              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `Showing ${catalogProducts.length} catalog products loaded`}</span><div className="table-footer-actions">{catalogHasMore && <button className="load-more-button" onClick={() => void loadMoreCatalogProducts()} disabled={catalogLoadingMore}>{catalogLoadingMore ? <><LoaderCircle size={14} /> Loading…</> : <>Load 25 more products <ArrowRight size={14} /></>}</button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div></div>
+              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `Showing ${products.length} products; ${catalogProducts.length} sourced catalog products loaded`}</span><div className="table-footer-actions">{catalogHasMore && <button className="load-more-button" onClick={() => void loadMoreCatalogProducts()} disabled={catalogLoadingMore}>{catalogLoadingMore ? <><LoaderCircle size={14} /> Loading…</> : <>Load 25 more products <ArrowRight size={14} /></>}</button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div></div>
             </div>
 
           </section>
