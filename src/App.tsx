@@ -214,6 +214,41 @@ function App() {
     setBidInput(String(Math.max((product.credits ?? 0) + 5, minimum)))
   }
 
+  async function openSpotBid(targetRank: number) {
+    const spot = Math.min(100, Math.max(1, targetRank))
+    if (!session) { setDialog('signin'); return }
+    if (!supabase) { setBidError('Bidding is temporarily unavailable.'); return }
+    setBidError('')
+    setBidNotice('')
+    const { data, error } = await supabase
+      .from('products')
+      .select('id,name,tagline,category,website_url,logo_url,standing_bids(amount)')
+      .eq('owner_id', session.user.id)
+      .eq('state', 'approved')
+      .eq('participates', true)
+      .limit(20)
+    if (error) {
+      setBidError('Could not load your eligible listings. Please try again.')
+      return
+    }
+    const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null;standing_bids?:{amount:number}[]|null}>
+    if (!owned.length) {
+      setBidNotice('')
+      setDialog('submit')
+      return
+    }
+    const chosen = owned[0]
+    const currentBid = chosen.standing_bids?.[0]?.amount ?? 0
+    const product: Product = {
+      id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
+      credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
+      tone: 'blue', website: chosen.website_url ?? '', logoUrl: chosen.logo_url, currentRank: null,
+    }
+    setBidTarget(product)
+    setBidTargetRank(spot)
+    setBidInput(String(Math.max(currentBid + 5, getMinimumBidForRank(product.id, spot))))
+  }
+
   async function submitInlineBid() {
     if (!supabase || !session || !bidTarget) return
     setBidError('')
@@ -289,7 +324,7 @@ function App() {
           <div className="header-actions">
             <label className={`searchbox ${mobileSearchOpen ? 'mobile-search-open' : ''}`} onClick={() => { if (window.innerWidth <= 700 && !mobileSearchOpen) setMobileSearchOpen(true) }}><Search size={16} /><input autoFocus={mobileSearchOpen} aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }} /><kbd>/</kbd></label>
             <button className="text-button login-button" onClick={() => session ? void supabase?.auth.signOut() : setDialog('signin')}>{session ? 'Sign out' : 'Log in'}</button>
-            <button className="button button-primary submit-button" onClick={() => session ? setPage('founder') : setDialog('submit')}>Submit a product</button>
+            <button className="button button-primary submit-button" onClick={() => void openSpotBid(Math.min(100, Math.max(1, rankById.get(product.id) ?? 1)))}>Submit a product</button>
           </div>
         ) : (
           <div className="header-actions">{session ? <span className="preview-chip"><span className="status-dot" /> {session.user.email}</span> : <span className="preview-chip"><span className="status-dot" /> Preview account</span>}{session ? <button className="button button-dark" onClick={() => void supabase?.auth.signOut()}>Sign out</button> : <button className="button button-dark" onClick={() => setDialog('signin')}>Sign in <ArrowRight size={15} /></button>}</div>
