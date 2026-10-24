@@ -351,7 +351,7 @@ function App() {
             <div className="results-column">
               <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
               <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span aria-hidden="true"></span></div>
-              {products.length ? products.map((product) => {
+              {products.length ? products.map((product, productIndex) => {
                 const rank = rankById.get(product.id) ?? null
                 return <div className="product-row" key={product.id}>
                   <span className="rank-number">{rank ? String(rank).padStart(2, '0') : '—'}</span>
@@ -359,7 +359,7 @@ function App() {
                   <span className="product-category">{product.category}</span>
                   <span className="bid-value">{product.isCatalog ? <small>Directory listing</small> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
                   
-                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, rankById.get(product.id) ?? 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>List to compete</span><strong>Promote your product</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
+                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, productIndex + 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>List to compete</span><strong>Promote your product</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
