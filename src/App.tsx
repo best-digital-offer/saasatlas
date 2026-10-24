@@ -474,7 +474,7 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
       <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Place a standing bid</h3><p>{product.name} · bid without leaving the leaderboard.</p></div></div>
       <div className="inline-bid-rank">
         <div className="inline-bid-stat"><span>Current rank</span><strong>{product.currentRank ? '#'+product.currentRank : 'Unranked'}</strong></div>
-        <div className="inline-bid-stat"><span>Current bid</span><strong>{currentBid.toLocaleString()} cr</strong></div>
+        <div className="inline-bid-stat"><span>Your existing bid</span><strong>{currentBid.toLocaleString()} cr</strong></div>
         <div className="inline-bid-stat"><span>Available credits</span><strong>{wallet ? wallet.available.toLocaleString() : '—'}</strong></div>
       </div>
       {session ? <>
