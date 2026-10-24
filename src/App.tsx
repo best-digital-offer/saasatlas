@@ -244,11 +244,18 @@ function App() {
     if (!owned.length) { setDialog('submit'); return }
     const chosen = owned.find((item) => liveProducts.some((product) => product.id === item.id)) ?? owned[0]
     const current = liveProducts.find((product) => product.id === chosen.id)
-    const currentBid = current?.credits ?? 0
+    // Look up the founder listing independently of the top-100 in-memory list so ranks below #100 are not shown as unranked.
+    const { data: rankRecord } = await supabase
+      .from('public_leaderboard')
+      .select('current_rank,standing_bid')
+      .eq('id', chosen.id)
+      .maybeSingle()
+    const currentBid = Number(rankRecord?.standing_bid ?? current?.credits ?? 0)
+    const currentRank = rankRecord?.current_rank ?? current?.currentRank ?? null
     const product: Product = {
       id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
       credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
-      tone: 'blue', website: chosen.website_url ?? '', logoUrl: chosen.logo_url, currentRank: current?.currentRank ?? null,
+      tone: 'blue', website: chosen.website_url ?? '', logoUrl: chosen.logo_url, currentRank,
     }
     setBidTarget(product)
     setBidTargetRank(spot)
@@ -452,7 +459,8 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
   onSubmit: ()=>void
   onSignIn: ()=>void
 }) {
-  const next = Number(amount)
+  const effectiveAmount = amount.trim() === '' ? String(Math.max(minimumBid, currentBid + 5, 1)) : amount
+  const next = Number(effectiveAmount)
   const extra = Math.max(0, next - currentBid)
   const eligible = Boolean(account?.email_verified_at && ['active','trialing'].includes(account.subscription_status)
     && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
@@ -480,7 +488,7 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
       {session ? <>
         {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for bidding.</div>}
         <div className="inline-bid-amount"><label htmlFor="inline-bid-target-rank">Target position (1–100)</label><select id="inline-bid-target-rank" value={targetRank} onChange={(event)=>setTargetRank(Number(event.target.value))}>{Array.from({length:100},(_,index)=>index+1).map((rank)=><option key={rank} value={rank}>Position #{rank}</option>)}</select></div>
-        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Your total standing bid (credits)</label><input id="inline-bid-amount" type="number" min={minimumBid} step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
+        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Your total standing bid (credits)</label><input id="inline-bid-amount" type="number" min={minimumBid} step="1" value={effectiveAmount} onChange={(event)=>setAmount(event.target.value)} /></div>
         <p className="inline-bid-helper">Your existing bid is {currentBid.toLocaleString()} credits. Target minimum for position #{targetRank} or higher: <strong>{minimumBid.toLocaleString()} credits</strong>. Higher bids rank above lower bids, so your final position may be better than the selected target. {extra.toLocaleString()} additional credits would be reserved if your bid increases; reducing your bid releases the difference.</p><div className="standing-bid-duration"><strong>How long will your position last?</strong><p>Your bid has no fixed time limit. It stays active until you change or withdraw it, or your listing becomes ineligible. If another eligible listing places a higher standing bid, your listing automatically moves down the rankings. A higher bid can overtake yours at any time.</p><p><strong>Paying credits does not guarantee a permanent position.</strong> Rankings update as eligible standing bids change.</p></div>
       </> : <><p className="inline-bid-signin">Sign in to reserve credits and place a standing bid on this listing.</p></>}
       {error && <div className="inline-bid-message error" role="alert">{error}</div>}
