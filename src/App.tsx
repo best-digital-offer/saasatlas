@@ -243,7 +243,7 @@ function App() {
     const chosen = owned.find((item) => liveProducts.some((product) => product.id === item.id)) ?? owned[0]
     const current = liveProducts.find((product) => product.id === chosen.id)
     const currentBid = Number(chosen.standing_bid ?? current?.credits ?? 0)
-    const currentRank = chosen.current_rank ?? current?.currentRank ?? null
+    const currentRank = current?.currentRank ?? chosen.current_rank ?? null
     const product: Product = {
       id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
       credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
