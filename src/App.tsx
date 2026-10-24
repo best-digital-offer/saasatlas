@@ -252,7 +252,7 @@ function App() {
     }
     setBidTarget(product)
     setBidTargetRank(spot)
-    setBidInput(String(Math.max(currentBid > 0 ? currentBid + 5 : 0, getMinimumBidForRank(product.id, spot))))
+    setBidInput(String(Math.max(currentBid + 5, getMinimumBidForRank(product.id, spot), 1)))
   }
 
   async function submitInlineBid() {
@@ -390,7 +390,7 @@ function App() {
       )}
 
       {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openBidModal(target) }} preview={dataState !== 'live'} />}
-      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} targetRank={bidTargetRank} setTargetRank={(rank) => { setBidTargetRank(rank); setBidInput(String(getMinimumBidForRank(bidTarget.id, rank))) }} minimumBid={getMinimumBidForRank(bidTarget.id, bidTargetRank)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
+      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} targetRank={bidTargetRank} setTargetRank={(rank) => { setBidTargetRank(rank); setBidInput(String(Math.max((bidTarget.credits ?? 0) + 5, getMinimumBidForRank(bidTarget.id, rank), 1))) }} minimumBid={getMinimumBidForRank(bidTarget.id, bidTargetRank)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
       {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
