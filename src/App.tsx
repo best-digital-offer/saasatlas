@@ -231,7 +231,13 @@ function App() {
       .limit(20)
     if (error) {
       console.error('Unable to load eligible listings for spot bid', error)
-      setBidError('We could not load your eligible listings. Please refresh the page and try again.')
+      setBidError('We could not load your eligible listings. Please refresh the page and try again. If this continues, check your approved listing and account permissions.')
+      setBidTarget({
+        id: 'spot-bid-unavailable', name: 'Spot bidding', tagline: 'Unable to load your eligible founder listing.',
+        category: 'Other', credits: 0, movement: 0, symbol: 'S', tone: 'blue', website: '', currentRank: null,
+      })
+      setBidTargetRank(spot)
+      setBidInput('')
       return
     }
     const owned = (data ?? []) as Array<{id:string;name:string;tagline:string;category:string;website_url:string;logo_url:string|null;created_at:string}>
