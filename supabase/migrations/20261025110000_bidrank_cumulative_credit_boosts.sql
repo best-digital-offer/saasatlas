@@ -27,6 +27,10 @@ create index if not exists leaderboard_credit_bids_catalog_idx
 alter table public.leaderboard_credit_bids enable row level security;
 revoke all on public.leaderboard_credit_bids from anon, authenticated;
 
+alter table public.credit_ledger drop constraint if exists credit_ledger_source_type_check;
+alter table public.credit_ledger add constraint credit_ledger_source_type_check
+  check (source_type in ('purchase', 'referral', 'bid_reserve', 'bid_release', 'withdrawal', 'refund', 'chargeback', 'admin_adjustment', 'reconciliation', 'bid_spend'));
+
 -- Preserve every existing active standing bid as the product's initial cumulative score.
 insert into public.leaderboard_credit_bids(owner_id, entry_type, product_id, catalog_product_id, amount, idempotency_key, created_at)
 select b.owner_id, 'founder', b.product_id, null, b.amount, gen_random_uuid(), b.accepted_at
@@ -67,10 +71,6 @@ where state = 'active';
 
 revoke execute on function public.place_or_update_bid(uuid, integer, uuid, integer) from public, anon, authenticated;
 revoke execute on function public.withdraw_standing_bid(uuid, uuid) from public, anon, authenticated;
-
-alter table public.credit_ledger drop constraint if exists credit_ledger_source_type_check;
-alter table public.credit_ledger add constraint credit_ledger_source_type_check
-  check (source_type in ('purchase', 'referral', 'bid_reserve', 'bid_release', 'withdrawal', 'refund', 'chargeback', 'admin_adjustment', 'reconciliation', 'bid_spend'));
 
 create or replace view public.public_leaderboard as
 with founder_boosts as (
