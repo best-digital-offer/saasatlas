@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowRight, Check, ChevronDown, ChevronRight,
-  Compass, ExternalLink, Menu, Plus, Search, Sparkles,
+  Activity, ArrowRight, Check, ChevronDown, ChevronRight, Clock, Crown,
+  Compass, ExternalLink, Menu, Plus, Search, Sparkles, TrendingUp,
   Trophy, X, LoaderCircle,
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase'
@@ -35,6 +35,25 @@ type Product = {
   descriptionSourceUrl?: string | null
   descriptionVerifiedAt?: string | null
   seoPath?: string
+}
+
+type BoostActivity = {
+  id: string
+  entry_type: 'founder' | 'catalog'
+  amount: number
+  entry_name: string | null
+  rank: number | null
+  created_at: string
+}
+
+function formatAge(value: string) {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000))
+  if (!Number.isFinite(minutes)) return 'Just now'
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 const sampleProducts: Product[] = [
@@ -106,6 +125,7 @@ function App() {
   const [mobileMenu, setMobileMenu] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
+  const [liveActivity, setLiveActivity] = useState<BoostActivity[]>([])
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
   const [session, setSession] = useState<Session | null>(null)
   const [displayLimit, setDisplayLimit] = useState(25)
@@ -134,7 +154,10 @@ function App() {
     if (!client) return
     let cancelled = false
     const loadLeaderboard = async () => {
-      const { data, error } = await client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false })
+      const [{ data, error }, { data: activityRows, error: activityError }] = await Promise.all([
+        client.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
+        client.from('public_leaderboard_activity').select('id,entry_type,amount,entry_name,rank,created_at').order('created_at', { ascending: false }).limit(8),
+      ])
       if (cancelled) return
       if (error) {
         setDataState('error')
@@ -143,6 +166,7 @@ function App() {
       }
       const rows = (data ?? []) as PublicLeaderboardRecord[]
       setLiveProducts(rows.map(mapLeaderboardRow))
+      if (!activityError && activityRows) setLiveActivity(activityRows as BoostActivity[])
       setDataState('live')
     }
     void loadLeaderboard()
@@ -186,11 +210,13 @@ function App() {
       setBidNotice(bidResult?.rank
         ? `Boost accepted. ${bidResult.entry_name ?? bidTarget.name} is now #${bidResult.rank} after adding ${amount.toLocaleString()} credits.`
         : `Boost accepted. Added ${amount.toLocaleString()} credits to ${bidTarget.name}.`)
-      const [{ data: rows, error: rowsError }, { data: freshWorkspace }] = await Promise.all([
+      const [{ data: rows, error: rowsError }, { data: freshWorkspace }, { data: activityRows, error: activityError }] = await Promise.all([
         supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
         supabase.rpc('get_founder_workspace'),
+        supabase.from('public_leaderboard_activity').select('id,entry_type,amount,entry_name,rank,created_at').order('created_at', { ascending: false }).limit(8),
       ])
       if (!rowsError) setLiveProducts(((rows ?? []) as PublicLeaderboardRecord[]).map(mapLeaderboardRow))
+      if (!activityError && activityRows) setLiveActivity(activityRows as BoostActivity[])
       if (freshWorkspace) setWorkspacePayload(freshWorkspace as typeof workspacePayload)
       if (bidResult?.total_bid_credits !== undefined) {
         setBidTarget((previous) => previous ? ({ ...previous, credits: bidResult.total_bid_credits!, currentRank: bidResult.rank ?? previous.currentRank }) : previous)
@@ -254,6 +280,34 @@ function App() {
 
           <div className={`preview-notice ${dataState === 'live' ? 'is-live' : ''}`}><Sparkles size={14} /><span>{dataState === 'live' && liveProducts.length > 0 ? <><strong>Unified live leaderboard</strong> — {liveProducts.length} founder and catalog listings rank together by cumulative bid credits.</> : dataState === 'live' ? <><strong>The directory is open</strong> — approved listings will appear here as they are published.</> : dataState === 'error' ? <><strong>Directory unavailable</strong> — database setup is incomplete or unreachable.</> : dataState === 'loading' ? <><strong>Loading directory</strong> — connecting to SaaslistAtlas.</> : <><strong>Illustrative preview</strong> — sample products and bid amounts; no live bids are shown.</>}</span></div>
 
+          {dataState === 'live' && liveProducts.length > 0 && (() => {
+            const leader = liveProducts.find((product) => product.currentRank === 1) ?? liveProducts[0]
+            return <section className="leader-spotlight" aria-label="Number one leaderboard spotlight">
+              <div className="leader-spotlight-topline">
+                <span className="leader-crown-label"><Crown size={15} /> #1 King of the Hill</span>
+                <span className="leader-category-label">{leader.category}</span>
+                <span className="leader-live-label"><span /> Live leaderboard</span>
+              </div>
+              <div className="leader-spotlight-main">
+                <div className="leader-spotlight-logo"><Logo product={leader} /></div>
+                <div className="leader-spotlight-copy">
+                  <h2>{leader.name}</h2>
+                  <p>{leader.tagline}</p>
+                  <div className="leader-spotlight-stats">
+                    <span>Current rank <strong>#1</strong></span>
+                    <span>Cumulative total <strong>{leader.credits.toLocaleString()} credits</strong></span>
+                    <span>Products ranked <strong>{liveProducts.length}</strong></span>
+                  </div>
+                </div>
+                <div className="leader-spotlight-actions">
+                  <button className="button button-primary" onClick={() => openProductBoost(leader)}><Crown size={15} /> Boost this listing</button>
+                  <button className="button button-light" onClick={() => setSelected(leader)}>View details <ArrowRight size={14} /></button>
+                </div>
+              </div>
+              <div className="leader-spotlight-foot"><Sparkles size={14} /> The crown follows the highest cumulative credit total. Boosts spend available credits and rankings recalculate automatically.</div>
+            </section>
+          })()}
+
           <div className="filter-row">
             <div className="category-tabs" role="tablist" aria-label="Filter by category">
               {categories.map((item) => <button key={item} role="tab" aria-selected={category === item} className={category === item ? 'selected' : ''} onClick={() => { setCategory(item); setDisplayLimit(25) }}>{item}</button>)}
@@ -284,6 +338,17 @@ function App() {
               <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${Math.min(products.length, displayLimit)} of 12 illustrative listings` : `Showing ${Math.min(products.length, displayLimit)} of ${products.length} ranked products`}</span><div className="table-footer-actions">{products.length > displayLimit && <button className="load-more-button" onClick={() => setDisplayLimit((limit) => Math.min(limit + 100, products.length))}>Load 100 more products <ArrowRight size={14} /></button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank'); setDisplayLimit(25) }}>Clear filters <X size={13} /></button></div></div>
             </div>
 
+          </section>
+
+          <section className="live-activity-section" aria-labelledby="live-activity-heading">
+            <div className="live-activity-header">
+              <div><span className="live-activity-eyebrow"><Activity size={14} /> REAL-TIME UPDATES</span><h2 id="live-activity-heading">Latest boost activity</h2><p>Recent credit boosts across founder listings and all 300 catalog products.</p></div>
+              <span className="live-activity-refresh"><Clock size={13} /> Refreshes every 30 seconds</span>
+            </div>
+            {liveActivity.length ? <div className="live-activity-grid">{liveActivity.slice(0, 6).map((item) => <article className="live-activity-item" key={item.id}>
+              <span className="live-activity-icon"><TrendingUp size={16} /></span>
+              <div className="live-activity-copy"><strong>{item.entry_name || 'Product listing'}</strong><p>Received <b>+{item.amount.toLocaleString()} credits</b>{item.rank ? <> and ranked <b>#{item.rank}</b> after the boost</> : null}.</p><time dateTime={item.created_at}>{formatAge(item.created_at)}</time></div>
+            </article>)}</div> : <div className="live-activity-empty"><Activity size={19} /><div><strong>No boosts yet</strong><p>Be the first to add credits to a listing. Accepted boosts appear here.</p></div></div>}
           </section>
 
           <footer className="site-footer"><div className="footer-brand"><span className="brand-mark"><span /><span /><span /></span> Saaslist<span>Atlas</span></div><span>Find your next favorite tool.</span><div className="footer-links"><button onClick={() => setDialog('how')}>How it works</button><button onClick={() => setDialog('submit')}>Submit a product</button></div><small>© 2026 SaaslistAtlas</small></footer>
