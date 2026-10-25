@@ -8,7 +8,7 @@ import { supabase, supabaseConfigured } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 import AuthDialog from './AuthDialog'
 import FounderWorkspace from './FounderWorkspace'
-import type { PublicCatalogProductRecord, PublicLeaderboardRecord } from './lib/supabase'
+import type { PublicLeaderboardRecord } from './lib/supabase'
 
 type Product = {
   id: string
@@ -21,6 +21,8 @@ type Product = {
   tone: string
   website: string
   currentRank?: number | null
+  firstBidAt?: string | null
+  createdAt?: string | null
   isCatalog?: boolean
   sourceProvider?: string
   sourceUrl?: string
@@ -54,6 +56,36 @@ const commonCategories = ['AI', 'Analytics', 'Design', 'Developer tools', 'Marke
 const sampleRankById = new Map(sampleProducts.map((product, index) => [product.id, index + 1]))
 const tones = ['midnight', 'blue', 'ink', 'sky', 'coral', 'mint', 'lavender', 'amber', 'teal', 'rose', 'slate']
 
+function mapLeaderboardRow(row: PublicLeaderboardRecord, index: number): Product {
+  const isCatalog = row.entry_type === 'catalog'
+  return {
+    id: isCatalog ? `catalog-${row.id}` : row.id,
+    name: row.name,
+    tagline: row.tagline,
+    category: row.category,
+    credits: Number(row.total_bid_credits ?? row.standing_bid ?? 0),
+    movement: row.current_rank && row.previous_rank ? row.previous_rank - row.current_rank : 0,
+    symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
+    tone: tones[index % tones.length],
+    website: row.website_url || row.canonical_url || '',
+    logoUrl: row.logo_url,
+    currentRank: row.current_rank,
+    firstBidAt: row.accepted_at,
+    createdAt: row.created_at,
+    isCatalog,
+    sourceProvider: row.source_provider ?? undefined,
+    sourceUrl: row.source_url ?? undefined,
+    attributionText: row.attribution_text ?? undefined,
+    verifiedAt: row.verified_at ?? undefined,
+    pricingModel: row.pricing_model,
+    pricingUrl: row.pricing_url,
+    pricingVerifiedAt: row.pricing_verified_at,
+    descriptionSourceUrl: row.description_source_url,
+    descriptionVerifiedAt: row.description_verified_at,
+    seoPath: row.seo_path ?? (isCatalog ? `/products/${row.slug}/` : undefined),
+  }
+}
+
 function Logo({ product, small = false }: { product: Product; small?: boolean }) {
   return <span aria-hidden="true" className={`product-mark ${product.tone} ${small ? 'small' : ''}`}>{product.logoUrl ? <img src={product.logoUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none' }} /> : product.symbol}</span>
 }
@@ -66,7 +98,6 @@ function App() {
   const [selected, setSelected] = useState<Product | null>(null)
   const [bidTarget, setBidTarget] = useState<Product | null>(null)
   const [bidInput, setBidInput] = useState('')
-  const [bidTargetRank, setBidTargetRank] = useState(1)
   const [bidSubmitting, setBidSubmitting] = useState(false)
   const [bidError, setBidError] = useState('')
   const [bidNotice, setBidNotice] = useState('')
@@ -75,12 +106,9 @@ function App() {
   const [mobileMenu, setMobileMenu] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [liveProducts, setLiveProducts] = useState<Product[]>([])
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
-  const [catalogHasMore, setCatalogHasMore] = useState(false)
-  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false)
-  const [catalogOffset, setCatalogOffset] = useState(25)
   const [dataState, setDataState] = useState<'preview' | 'loading' | 'live' | 'error'>(supabaseConfigured ? 'loading' : 'preview')
   const [session, setSession] = useState<Session | null>(null)
+  const [displayLimit, setDisplayLimit] = useState(25)
 
   useEffect(() => {
     let cancelled = false
@@ -114,19 +142,7 @@ function App() {
         return
       }
       const rows = (data ?? []) as PublicLeaderboardRecord[]
-      setLiveProducts(rows.map((row, index) => ({
-        id: row.id,
-        name: row.name,
-        tagline: row.tagline,
-        category: row.category,
-        credits: row.standing_bid ?? 0,
-        movement: row.current_rank && row.previous_rank ? row.previous_rank - row.current_rank : 0,
-        symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
-        tone: tones[index % tones.length],
-        website: row.website_url,
-        logoUrl: row.logo_url,
-        currentRank: row.current_rank,
-      })))
+      setLiveProducts(rows.map(mapLeaderboardRow))
       setDataState('live')
     }
     void loadLeaderboard()
@@ -134,124 +150,21 @@ function App() {
     return () => { cancelled = true; window.clearInterval(refreshTimer) }
   }, [])
 
-  useEffect(() => {
-    const client = supabase
-    if (!client) return
-    let cancelled = false
-    const loadInitialCatalog = async () => {
-      const { data, error } = await client.from('published_catalog_products')
-        .select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at')
-        .order('name').range(0, 24)
-      if (cancelled) return
-      if (error) { setCatalogHasMore(false); return }
-      const rows = (data ?? []) as PublicCatalogProductRecord[]
-      setCatalogProducts(rows.map((row, index) => ({
-        id: `catalog-${row.id}`, name: row.name, tagline: row.description, category: row.category,
-        credits: 0, movement: 0, symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
-        tone: tones[(index + liveProducts.length) % tones.length], website: row.canonical_url,
-        currentRank: null, isCatalog: true, sourceProvider: row.source_provider, sourceUrl: row.source_url,
-        attributionText: row.attribution_text, verifiedAt: row.verified_at, pricingModel: row.pricing_model,
-        pricingUrl: row.pricing_url, pricingVerifiedAt: row.pricing_verified_at, logoUrl: row.logo_path,
-        descriptionSourceUrl: row.description_source_url, descriptionVerifiedAt: row.description_verified_at,
-        seoPath: `/products/${row.slug}/`,
-      })))
-      setCatalogOffset(rows.length)
-      setCatalogHasMore(rows.length === 25)
-    }
-    void loadInitialCatalog()
-    return () => { cancelled = true }
-  }, [])
-
-  async function loadMoreCatalogProducts() {
-    const client = supabase
-    if (!client || catalogLoadingMore || !catalogHasMore) return
-    setCatalogLoadingMore(true)
-    const start = catalogOffset
-    try {
-      const { data, error } = await client.from('published_catalog_products')
-        .select('id,name,slug,canonical_url,description,category,subcategory,pricing_model,pricing_url,pricing_verified_at,source_provider,source_url,attribution_text,verified_at,logo_path,logo_source_url,logo_verified_at,description_source_url,description_verified_at')
-        .order('name').range(start, start + 24)
-      if (error) throw error
-      const rows = (data ?? []) as PublicCatalogProductRecord[]
-      setCatalogProducts(previous => [...previous, ...rows.map((row, index) => ({
-        id: `catalog-${row.id}`, name: row.name, tagline: row.description, category: row.category,
-        credits: 0, movement: 0, symbol: row.name.trim().slice(0, 1).toUpperCase() || '•',
-        tone: tones[(start + index + liveProducts.length) % tones.length], website: row.canonical_url,
-        currentRank: null, isCatalog: true, sourceProvider: row.source_provider, sourceUrl: row.source_url,
-        attributionText: row.attribution_text, verifiedAt: row.verified_at, pricingModel: row.pricing_model,
-        pricingUrl: row.pricing_url, pricingVerifiedAt: row.pricing_verified_at, logoUrl: row.logo_path,
-        descriptionSourceUrl: row.description_source_url, descriptionVerifiedAt: row.description_verified_at,
-        seoPath: `/products/${row.slug}/`,
-      }))])
-      setCatalogOffset(start + rows.length)
-      setCatalogHasMore(rows.length === 25)
-    } catch (error) {
-      console.error('Unable to load more catalog products', error)
-    } finally {
-      setCatalogLoadingMore(false)
-    }
+  function getMinimumBoostForNextRank(product: Product) {
+    const rank = product.currentRank ?? 999999
+    const previous = liveProducts.find((candidate) => candidate.currentRank === rank - 1)
+    if (!product.credits || product.credits <= 0) return 5
+    if (!previous) return 5
+    return Math.max(1, previous.credits - product.credits + 1)
   }
 
-
-  function getMinimumBidForRank(productId: string, targetRank: number) {
-    const highestBid = liveProducts
-      .filter((candidate) => candidate.credits > 0 && (targetRank > 1 || candidate.id !== productId))
-      .reduce((highest, candidate) => Math.max(highest, candidate.credits), 0)
-    // Each target spot is priced five credits below the leading standing bid.
-    // Position #1 requires outbidding a competing leader; lower positions use the published spot ladder.
-    if (targetRank <= 1) return highestBid + 5
-    return Math.max(5, highestBid - ((targetRank - 1) * 5))
-  }
-
-  function openBidModal(product: Product) {
-    if (product.isCatalog) return
-    if (!session) { setDialog('signin'); return }
-    setBidError('')
-    setBidNotice('')
-    setBidTarget(product)
-    const targetRank = Math.min(100, Math.max(1, product.currentRank ?? 1))
-    const minimum = getMinimumBidForRank(product.id, targetRank)
-    setBidTargetRank(targetRank)
-    setBidInput(String(Math.max((product.credits ?? 0) + 5, minimum)))
-  }
-
-  async function openSpotBid(targetRank: number) {
-    const spot = Math.min(100, Math.max(1, targetRank))
+  function openProductBoost(product: Product) {
     if (!session) { setDialog('signin'); return }
     if (!supabase) { setBidError('Bidding is temporarily unavailable. Please refresh and try again.'); return }
     setBidError('')
     setBidNotice('')
-    // Use the existing SECURITY DEFINER workspace RPC rather than a direct products SELECT,
-    // which can be blocked by product-table RLS for an otherwise eligible founder.
-    const { data: workspaceData, error } = await supabase.rpc('get_founder_workspace')
-    if (error || !workspaceData) {
-      console.error('Unable to load founder workspace for spot bid', error)
-      setBidError(`Could not load your founder workspace: ${error?.message ?? 'no workspace data returned'}. Please refresh and try again.`)
-      setBidTarget({
-        id: 'spot-bid-unavailable', name: 'Spot bidding', tagline: 'Unable to load your eligible founder listing.',
-        category: 'Other', credits: 0, movement: 0, symbol: 'S', tone: 'blue', website: '', currentRank: null,
-      })
-      setBidTargetRank(spot)
-      setBidInput(String(Math.max(getMinimumBidForRank('', spot), 1)))
-      return
-    }
-    const workspace = workspaceData as {
-      products?: Array<{id:string;name:string;tagline?:string;category?:string;website_url?:string;logo_url?:string|null;state?:string;current_rank?:number|null;standing_bid?:number|null;created_at?:string}>
-    }
-    const owned = (workspace.products ?? []).filter((item) => item.state === 'approved')
-    if (!owned.length) { setDialog('submit'); return }
-    const chosen = owned.find((item) => liveProducts.some((product) => product.id === item.id)) ?? owned[0]
-    const current = liveProducts.find((product) => product.id === chosen.id)
-    const currentBid = Number(chosen.standing_bid ?? current?.credits ?? 0)
-    const currentRank = current?.currentRank ?? chosen.current_rank ?? null
-    const product: Product = {
-      id: chosen.id, name: chosen.name, tagline: chosen.tagline ?? '', category: chosen.category ?? 'Other',
-      credits: currentBid, movement: 0, symbol: chosen.name.trim().slice(0,1).toUpperCase() || '•',
-      tone: 'blue', website: chosen.website_url ?? '', logoUrl: chosen.logo_url, currentRank,
-    }
     setBidTarget(product)
-    setBidTargetRank(spot)
-    setBidInput(String(Math.max(currentBid + 5, getMinimumBidForRank(product.id, spot), 1)))
+    setBidInput(String(getMinimumBoostForNextRank(product)))
   }
 
   async function submitInlineBid() {
@@ -260,46 +173,40 @@ function App() {
     setBidNotice('')
     const amount = Number(bidInput)
     if (!Number.isSafeInteger(amount) || amount <= 0) { setBidError('Enter a whole number of credits.'); return }
+    if (amount > (workspacePayload?.wallet?.available ?? 0)) { setBidError('Insufficient available credits.'); return }
     setBidSubmitting(true)
     try {
-      const { data, error } = await supabase.rpc('place_or_update_bid', {
-        p_product_id: bidTarget.id,
+      const { data, error } = await supabase.rpc('boost_leaderboard_entry', {
+        p_entry_type: bidTarget.isCatalog ? 'catalog' : 'founder',
+        p_entry_id: bidTarget.isCatalog ? bidTarget.id.replace(/^catalog-/, '') : bidTarget.id,
         p_amount: amount,
         p_idempotency_key: crypto.randomUUID(),
-        p_target_rank: bidTargetRank,
       })
       if (error) throw error
-      const bidResult = data as { rank?: number; additional_reserved?: number; released_credits?: number } | null
-      setBidNotice(bidResult?.rank ? `Standing bid accepted. Your listing is now #${bidResult.rank}.` : 'Standing bid accepted. The leaderboard has been updated.')
+      const bidResult = data as { rank?: number; total_bid_credits?: number; added_credits?: number; entry_name?: string } | null
+      setBidNotice(bidResult?.rank
+        ? `Boost accepted. ${bidResult.entry_name ?? bidTarget.name} is now #${bidResult.rank} after adding ${amount.toLocaleString()} credits.`
+        : `Boost accepted. Added ${amount.toLocaleString()} credits to ${bidTarget.name}.`)
       const [{ data: rows, error: rowsError }, { data: freshWorkspace }] = await Promise.all([
         supabase.from('public_leaderboard').select('*').order('current_rank', { ascending: true, nullsFirst: false }),
         supabase.rpc('get_founder_workspace'),
       ])
-      if (!rowsError) {
-        setLiveProducts(((rows ?? []) as PublicLeaderboardRecord[]).map((row, index) => ({
-          id: row.id, name: row.name, tagline: row.tagline, category: row.category,
-          credits: row.standing_bid ?? 0, movement: row.current_rank && row.previous_rank ? row.previous_rank - row.current_rank : 0,
-          symbol: row.name.trim().slice(0, 1).toUpperCase() || '•', tone: tones[index % tones.length],
-          website: row.website_url, logoUrl: row.logo_url, currentRank: row.current_rank,
-        })))
-      }
+      if (!rowsError) setLiveProducts(((rows ?? []) as PublicLeaderboardRecord[]).map(mapLeaderboardRow))
       if (freshWorkspace) setWorkspacePayload(freshWorkspace as typeof workspacePayload)
-      setBidTarget((previous) => previous ? ({ ...previous, credits: amount, currentRank: bidResult?.rank ?? previous.currentRank }) : previous)
+      if (bidResult?.total_bid_credits !== undefined) {
+        setBidTarget((previous) => previous ? ({ ...previous, credits: bidResult.total_bid_credits!, currentRank: bidResult.rank ?? previous.currentRank }) : previous)
+      }
     } catch (cause) {
-      setBidError(cause instanceof Error ? cause.message : 'Bid was not accepted.')
+      setBidError(cause instanceof Error ? cause.message : 'Boost was not accepted.')
     } finally {
       setBidSubmitting(false)
     }
   }
 
-  const allProducts = dataState === 'live' ? [...liveProducts, ...catalogProducts] : dataState === 'preview' ? sampleProducts : []
+  const allProducts = dataState === 'live' ? liveProducts : dataState === 'preview' ? sampleProducts : []
   const categories = useMemo(() => ['All products', ...new Set([...commonCategories, ...allProducts.map((product) => product.category)])], [allProducts])
-  const activeBidCount = liveProducts.filter((product) => product.credits > 0).length
-  const catalogRankById = new Map(catalogProducts.map((product, index) => [product.id, activeBidCount + index + 1]))
   const rankById = new Map(allProducts.map((product, index) => [product.id,
-    product.isCatalog
-      ? catalogRankById.get(product.id) ?? null
-      : product.currentRank !== undefined ? product.currentRank : sampleRankById.get(product.id) ?? index + 1]))
+    product.currentRank !== undefined && product.currentRank !== null ? product.currentRank : sampleRankById.get(product.id) ?? index + 1]))
 
   const products = useMemo(() => {
     const filtered = allProducts.filter((product) => {
@@ -330,7 +237,7 @@ function App() {
         </nav>
         {page === 'discover' ? (
           <div className="header-actions">
-            <label className={`searchbox ${mobileSearchOpen ? 'mobile-search-open' : ''}`} onClick={() => { if (window.innerWidth <= 700 && !mobileSearchOpen) setMobileSearchOpen(true) }}><Search size={16} /><input autoFocus={mobileSearchOpen} aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }} /><kbd>/</kbd></label>
+            <label className={`searchbox ${mobileSearchOpen ? 'mobile-search-open' : ''}`} onClick={() => { if (window.innerWidth <= 700 && !mobileSearchOpen) setMobileSearchOpen(true) }}><Search size={16} /><input autoFocus={mobileSearchOpen} aria-label="Search products and categories" placeholder="Search products, categories…" value={query} onChange={(event) => { setQuery(event.target.value); setDisplayLimit(25) }} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }} /><kbd>/</kbd></label>
             <button className="text-button login-button" onClick={() => session ? void supabase?.auth.signOut() : setDialog('signin')}>{session ? 'Sign out' : 'Log in'}</button>
             <button className="button button-primary submit-button" onClick={() => session ? setPage('founder') : setDialog('submit')}>Submit a product</button>
           </div>
@@ -350,7 +257,7 @@ function App() {
 
           <div className="filter-row">
             <div className="category-tabs" role="tablist" aria-label="Filter by category">
-              {categories.map((item) => <button key={item} role="tab" aria-selected={category === item} className={category === item ? 'selected' : ''} onClick={() => setCategory(item)}>{item}</button>)}
+              {categories.map((item) => <button key={item} role="tab" aria-selected={category === item} className={category === item ? 'selected' : ''} onClick={() => { setCategory(item); setDisplayLimit(25) }}>{item}</button>)}
             </div>
             
           </div>
@@ -358,16 +265,16 @@ function App() {
           <section className="leaderboard-layout single-column" aria-label="SaaS leaderboard">
             <div className="results-column">
               <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
-              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Standing bid</span><span aria-hidden="true"></span></div>
-              {products.length ? products.map((product, productIndex) => {
+              <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Cumulative bid</span><span aria-hidden="true"></span></div>
+              {products.length ? products.slice(0, displayLimit).map((product) => {
                 const rank = rankById.get(product.id) ?? null
+                const nextBoost = getMinimumBoostForNextRank(product)
                 return <div className="product-row" key={product.id}>
                   <span className="rank-number">{rank ? String(rank).padStart(2, '0') : '—'}</span>
                   <button className="product-identity" onClick={() => setSelected(product)} aria-label={`View ${product.name}, rank ${rank}`}><Logo product={product} /><span className="product-copy"><strong>{product.name}</strong><small>{product.tagline}</small></span></button>
                   <span className="product-category">{product.category}</span>
-                  <span className="bid-value">{product.isCatalog ? <><strong>{getMinimumBidForRank('', rank ?? 1).toLocaleString()}</strong> <small>credits to bid</small></> : product.credits > 0 ? <><strong>{product.credits}</strong> <small>credits</small></> : <small>No bid</small>}</span>
-                  
-                  {product.isCatalog ? <button className="product-boost product-boost-cta catalog-compete-cta" onClick={() => void openSpotBid(Math.min(100, Math.max(1, rank ?? productIndex + 1)))} aria-label={`Bid for this position using your listing, near ${product.name}`}><span>Bid for #{rank ?? productIndex + 1}</span><strong>{getMinimumBidForRank('', rank ?? productIndex + 1).toLocaleString()} credits</strong></button> : rank && rank <= 100 ? (() => { const targetRank = Math.min(100, Math.max(1, rank)); const minimum = Math.max(product.credits + 5, getMinimumBidForRank(product.id, targetRank)); return <button className="product-boost product-boost-cta" onClick={() => openBidModal(product)} aria-label={`Bid ${minimum.toLocaleString()} credits for position #${targetRank} with ${product.name}`}><span>Bid for #{targetRank}</span><strong>{minimum.toLocaleString()} credits</strong></button> })() : <span className="directory-action">Outside top 100</span>}
+                  <span className="bid-value"><strong>{product.credits.toLocaleString()}</strong> <small>total credits</small></span>
+                  <button className="product-boost product-boost-cta" onClick={() => openProductBoost(product)} aria-label={`Boost ${product.name} by credits`}><span>Boost listing</span><strong>from {nextBoost.toLocaleString()} credits</strong></button>
                 </div>
               }) : <div className={`empty-state ${dataState === 'live' && liveProducts.length === 0 ? 'empty-directory' : ''}`}>
                 {dataState === 'live' && liveProducts.length === 0 ? <span className="empty-emblem"><Compass size={22} /></span> : <Search size={20} />}
@@ -375,7 +282,7 @@ function App() {
                 <span>{dataState === 'live' && liveProducts.length === 0 ? 'Be the first founder to introduce a product to SaaslistAtlas.' : 'Try another search or category.'}</span>
                 <button onClick={() => dataState === 'live' && liveProducts.length === 0 ? setDialog('submit') : (setQuery(''), setCategory('All products'))}>{dataState === 'live' && liveProducts.length === 0 ? 'Submit the first product' : 'Clear filters'}</button>
               </div>}
-              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${products.length} of 12 illustrative listings` : `Showing ${products.length} products; ${catalogProducts.length} sourced catalog products loaded`}</span><div className="table-footer-actions">{catalogHasMore && <button className="load-more-button" onClick={() => void loadMoreCatalogProducts()} disabled={catalogLoadingMore}>{catalogLoadingMore ? <><LoaderCircle size={14} /> Loading…</> : <>Load 25 more products <ArrowRight size={14} /></>}</button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank') }}>Clear filters <X size={13} /></button></div></div>
+              <div className="table-footer"><span>{dataState === 'preview' ? `Showing ${Math.min(products.length, displayLimit)} of 12 illustrative listings` : `Showing ${Math.min(products.length, displayLimit)} of ${products.length} ranked products`}</span><div className="table-footer-actions">{products.length > displayLimit && <button className="load-more-button" onClick={() => setDisplayLimit((limit) => Math.min(limit + 100, products.length))}>Load 100 more products <ArrowRight size={14} /></button>}<button onClick={() => { setCategory('All products'); setQuery(''); setSort('rank'); setDisplayLimit(25) }}>Clear filters <X size={13} /></button></div></div>
             </div>
 
           </section>
@@ -388,8 +295,8 @@ function App() {
         <FounderDashboard onSignIn={() => setDialog('signin')} onHow={() => setDialog('how')} />
       )}
 
-      {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openBidModal(target) }} preview={dataState !== 'live'} />}
-      {bidTarget && <InlineBidDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentBid={bidTarget.credits} targetRank={bidTargetRank} setTargetRank={(rank) => { setBidTargetRank(rank); setBidInput(String(Math.max((bidTarget.credits ?? 0) + 5, getMinimumBidForRank(bidTarget.id, rank), 1))) }} minimumBid={getMinimumBidForRank(bidTarget.id, bidTargetRank)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
+      {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openProductBoost(target) }} preview={dataState !== 'live'} />}
+      {bidTarget && <BoostDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentTotal={bidTarget.credits} leaderboard={allProducts} minimumAmount={getMinimumBoostForNextRank(bidTarget)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
       {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
@@ -416,32 +323,31 @@ function ProductDialog({ product, rank, onClose, onBid, preview }: { product: Pr
       <p className="dialog-tagline">{product.tagline}</p>
       <div className="detail-stats">
         <div><span>Current position</span><strong>{rank ? `#${String(rank).padStart(2, '0')}` : '—'}</strong></div>
-        <div><span>{product.isCatalog ? 'Pricing model' : 'Standing bid'}</span><strong>{product.isCatalog ? product.pricingModel ?? 'Not listed' : product.credits > 0 ? product.credits : '—'} <small>{!product.isCatalog && product.credits > 0 ? 'credits' : ''}</small></strong></div>
+        <div><span>Cumulative bid</span><strong>{product.credits.toLocaleString()} <small>credits</small></strong></div>
         
       </div>
       <p className="detail-disclaimer">{product.isCatalog ? <>
         {product.descriptionSourceUrl ? <>Description checked against the <a href={product.descriptionSourceUrl} target="_blank" rel="noreferrer">official product page</a>{product.descriptionVerifiedAt ? ` on ${new Date(product.descriptionVerifiedAt).toLocaleDateString()}` : ''}. </> : <>Description provided by ComparEdge under CC BY 4.0. </>}
         Sourced from <a href={product.sourceUrl} target="_blank" rel="noreferrer">{product.sourceProvider}</a>. {product.attributionText} Verified {product.verifiedAt ? new Date(product.verifiedAt).toLocaleDateString() : 'date unavailable'}.
         {product.pricingUrl && <> Pricing details: <a href={product.pricingUrl} target="_blank" rel="noreferrer">official pricing page</a>{product.pricingVerifiedAt ? ` (checked ${new Date(product.pricingVerifiedAt).toLocaleDateString()})` : ''}.</>}
-      </> : preview ? 'This listing and its bid are sample data for the interface preview. No live bidding is taking place.' : 'Ranks reflect current eligible standing bids. A bid reservation remains active until changed or withdrawn.'}</p>
+      </> : preview ? 'This listing and its bid are sample data for the interface preview. No live bidding is taking place.' : 'Ranks are based on cumulative credits added by eligible users. Higher totals rank above lower totals.'}</p>
       <div className="dialog-actions">
         {product.isCatalog && product.seoPath && <a className="button button-light" href={product.seoPath}>Product profile <ExternalLink size={14} /></a>}
         <a className="button button-light" href={websiteUrl} target={preview ? undefined : '_blank'} rel="noreferrer" onClick={preview ? (event) => event.preventDefault() : undefined}>Visit website <ExternalLink size={14} /></a>
-        {!product.isCatalog && <button className="button button-primary" onClick={onBid}>Bid to rank with your product <ArrowRight size={14} /></button>}
+        {!preview && <button className="button button-primary" onClick={onBid}>Boost this listing <ArrowRight size={14} /></button>}
       </div>
     </section>
   </div>
 }
 
-function InlineBidDialog({ product, session, wallet, account, currentBid, targetRank, setTargetRank, minimumBid, amount, setAmount, submitting, error, notice, onClose, onSubmit, onSignIn }: {
+function BoostDialog({ product, session, wallet, account, currentTotal, leaderboard, minimumAmount, amount, setAmount, submitting, error, notice, onClose, onSubmit, onSignIn }: {
   product: Product
   session: Session | null
   wallet: {available:number; reserved:number} | null
   account: {email_verified_at:string|null; subscription_status:string; subscription_valid_until:string|null; grace_period_ends_at:string|null} | null
-  currentBid: number
-  targetRank: number
-  setTargetRank: (rank:number)=>void
-  minimumBid: number
+  currentTotal: number
+  leaderboard: Product[]
+  minimumAmount: number
   amount: string
   setAmount: (value:string)=>void
   submitting: boolean
@@ -451,42 +357,49 @@ function InlineBidDialog({ product, session, wallet, account, currentBid, target
   onSubmit: ()=>void
   onSignIn: ()=>void
 }) {
-  const effectiveAmount = amount.trim() === '' ? String(Math.max(minimumBid, currentBid + 5, 1)) : amount
-  const next = Number(effectiveAmount)
-  const extra = Math.max(0, next - currentBid)
+  const next = Number(amount)
+  const projectedTotal = currentTotal + (Number.isSafeInteger(next) && next > 0 ? next : 0)
+  const projectedRank = leaderboard.filter((candidate) => {
+    if (candidate.id === product.id) return false
+    if (candidate.credits !== projectedTotal) return candidate.credits > projectedTotal
+    const candidateTime = candidate.firstBidAt ? new Date(candidate.firstBidAt).getTime() : Number.POSITIVE_INFINITY
+    const productTime = product.firstBidAt ? new Date(product.firstBidAt).getTime() : Number.POSITIVE_INFINITY
+    if (candidateTime !== productTime) return candidateTime < productTime
+    const candidateCreated = candidate.createdAt ? new Date(candidate.createdAt).getTime() : 0
+    const productCreated = product.createdAt ? new Date(product.createdAt).getTime() : 0
+    return candidateCreated !== productCreated ? candidateCreated < productCreated : candidate.id.localeCompare(product.id) < 0
+  }).length + 1
   const eligible = Boolean(account?.email_verified_at && ['active','trialing'].includes(account.subscription_status)
     && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
+  const validAmount = Number.isSafeInteger(next) && next >= minimumAmount && next <= (wallet?.available ?? 0)
   return <div className="overlay" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget) onClose()}}>
     <section className="dialog inline-bid-card" role="dialog" aria-modal="true" aria-labelledby="inline-bid-title">
       <style>{`
         .inline-bid-card { max-height: min(88dvh, 760px); display: flex; flex-direction: column; overflow: hidden; }
         .inline-bid-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 2px 8px 0; }
         .inline-bid-actions { flex-shrink: 0; position: sticky; bottom: 0; z-index: 2; background: var(--surface, #fff); padding-top: 12px; }
-        @media (max-width: 600px) {
-          .inline-bid-card { width: min(100%, 520px); max-height: 88dvh; padding: 18px; }
-          .inline-bid-actions { display: grid; grid-template-columns: 1fr; }
-          .inline-bid-actions .button { width: 100%; }
-        }
+        @media (max-width: 600px) { .inline-bid-card { width: min(100%, 520px); max-height: 88dvh; padding: 18px; } .inline-bid-actions { display: grid; grid-template-columns: 1fr; } .inline-bid-actions .button { width: 100%; } }
       `}</style>
       <div className="inline-bid-scroll">
-      <button className="close-button" onClick={onClose} aria-label="Close"><X size={18}/></button>
-      <span className="sample-kicker">Live standing bid · position can change</span>
-      <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Place a standing bid</h3><p>{product.name} · bid without leaving the leaderboard.</p></div></div>
-      <div className="inline-bid-rank">
-        <div className="inline-bid-stat"><span>Current rank</span><strong>{product.currentRank ? '#'+product.currentRank : 'Unranked'}</strong></div>
-        <div className="inline-bid-stat"><span>Target spot price</span><strong>{minimumBid.toLocaleString()} cr</strong></div>
-        <div className="inline-bid-stat"><span>Available credits</span><strong>{wallet ? wallet.available.toLocaleString() : '—'}</strong></div>
+        <button className="close-button" onClick={onClose} aria-label="Close"><X size={18}/></button>
+        <span className="sample-kicker">Cumulative credit boost · live ranking</span>
+        <div className="inline-bid-product"><Logo product={product}/><div><h3 id="inline-bid-title">Boost this listing</h3><p>{product.name} · credits are added to this product’s cumulative bid total.</p></div></div>
+        <div className="inline-bid-rank">
+          <div className="inline-bid-stat"><span>Current rank</span><strong>{product.currentRank ? '#'+product.currentRank : '—'}</strong></div>
+          <div className="inline-bid-stat"><span>Cumulative total</span><strong>{currentTotal.toLocaleString()} cr</strong></div>
+          <div className="inline-bid-stat"><span>Projected rank</span><strong>#{projectedRank}</strong></div>
+          <div className="inline-bid-stat"><span>Available credits</span><strong>{wallet ? wallet.available.toLocaleString() : '—'}</strong></div>
+        </div>
+        {session ? <>
+          {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for boosting.</div>}
+          <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Credits to add</label><input id="inline-bid-amount" type="number" min={minimumAmount} step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
+          <p className="inline-bid-helper">This adds <strong>{Number.isSafeInteger(next) && next > 0 ? next.toLocaleString() : '0'} credits</strong> to {product.name}. Its cumulative total would become <strong>{projectedTotal.toLocaleString()} credits</strong>. Higher cumulative totals rank first; the position is recalculated after acceptance and may change when other people boost listings.</p>
+          <div className="standing-bid-duration"><strong>How ranking works</strong><p>Every eligible listing—including the 300 catalog products—uses the same leaderboard. Each accepted boost adds to that listing’s cumulative total; higher totals move above lower totals. The system does not promise a fixed position based on which row you click.</p><p><strong>Referral-earned credits can be used</strong> as long as they are available in your wallet and your account is eligible to bid.</p></div>
+        </> : <p className="inline-bid-signin">Sign in to use available credits to boost this listing.</p>}
+        {error && <div className="inline-bid-message error" role="alert">{error}</div>}
+        {notice && <div className="inline-bid-message notice" role="status">{notice}</div>}
       </div>
-      {session ? <>
-        {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for bidding.</div>}
-        <div className="inline-bid-amount"><label htmlFor="inline-bid-target-rank">Target position (1–100)</label><select id="inline-bid-target-rank" value={targetRank} onChange={(event)=>setTargetRank(Number(event.target.value))}>{Array.from({length:100},(_,index)=>index+1).map((rank)=><option key={rank} value={rank}>Position #{rank}</option>)}</select></div>
-        <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Your total standing bid (credits)</label><input id="inline-bid-amount" type="number" min={minimumBid} step="1" value={effectiveAmount} onChange={(event)=>setAmount(event.target.value)} /></div>
-        <p className="inline-bid-helper">Your existing bid is {currentBid.toLocaleString()} credits. Target minimum for position #{targetRank} or higher: <strong>{minimumBid.toLocaleString()} credits</strong>. Higher bids rank above lower bids, so your final position may be better than the selected target. {extra.toLocaleString()} additional credits would be reserved if your bid increases; reducing your bid releases the difference.</p><div className="standing-bid-duration"><strong>How long will your position last?</strong><p>Your bid has no fixed time limit. It stays active until you change or withdraw it, or your listing becomes ineligible. If another eligible listing places a higher standing bid, your listing automatically moves down the rankings. A higher bid can overtake yours at any time.</p><p><strong>Paying credits does not guarantee a permanent position.</strong> Rankings update as eligible standing bids change.</p></div>
-      </> : <><p className="inline-bid-signin">Sign in to reserve credits and place a standing bid on this listing.</p></>}
-      {error && <div className="inline-bid-message error" role="alert">{error}</div>}
-      {notice && <div className="inline-bid-message notice" role="status">{notice}</div>}
-      </div>
-      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !Number.isSafeInteger(next) || next<minimumBid || next<=0 || extra>(wallet?.available ?? 0)}>{submitting ? <><LoaderCircle size={15}/> Placing bid…</> : `Pay ${next.toLocaleString()} credits to reach #${targetRank} or higher`}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to bid <ArrowRight size={14}/></button>}</div>
+      <div className="inline-bid-actions"><button className="button button-light" onClick={onClose}>Close</button>{session ? <button className="button button-primary" onClick={onSubmit} disabled={submitting || !eligible || !validAmount}>{submitting ? <><LoaderCircle size={15}/> Adding credits…</> : `Add ${Number.isSafeInteger(next) && next > 0 ? next.toLocaleString() : '0'} credits and boost listing`}</button> : <button className="button button-primary" onClick={onSignIn}>Sign in to boost <ArrowRight size={14}/></button>}</div>
     </section>
   </div>
 }
