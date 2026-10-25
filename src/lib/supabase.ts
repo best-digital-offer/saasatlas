@@ -10,6 +10,7 @@ export const supabase = supabaseConfigured ? createClient(url!, anonKey!, {
 
 export type PublicLeaderboardRecord = {
   id: string
+  slug: string
   name: string
   tagline: string
   category: string
@@ -18,6 +19,21 @@ export type PublicLeaderboardRecord = {
   standing_bid: number | null
   current_rank: number | null
   previous_rank: number | null
+  entry_type?: 'founder' | 'catalog'
+  total_bid_credits?: number
+  source_provider?: string | null
+  source_url?: string | null
+  attribution_text?: string | null
+  verified_at?: string | null
+  pricing_model?: string | null
+  pricing_url?: string | null
+  pricing_verified_at?: string | null
+  description_source_url?: string | null
+  description_verified_at?: string | null
+  canonical_url?: string | null
+  seo_path?: string | null
+  created_at?: string | null
+  accepted_at?: string | null
 }
 
 export type PublicCatalogProductRecord = {

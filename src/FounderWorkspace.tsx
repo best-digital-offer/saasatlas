@@ -18,7 +18,7 @@ type WorkspacePayload = {
   products: Array<{
     id: string; name: string; tagline: string; description: string; category: string; website_url: string
     state: string; logo_url: string | null; current_rank: number | null; previous_rank: number | null
-    standing_bid: number | null; bid_state: string | null; last_withdrawn_at: string | null; created_at: string
+    standing_bid: number | null; total_bid_credits?: number; bid_state: string | null; last_withdrawn_at: string | null; created_at: string
   }>
   ledger: Array<{ id: string; source_type: string; credit_amount: number; available_delta: number; reserved_delta: number; reason: string; created_at: string }>
   referrals: Array<{ id: string; state: string; reward_credits: number | null; attribution_at: string; created_at: string }>
@@ -51,7 +51,6 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [bidAmounts, setBidAmounts] = useState<Record<string, string>>({})
   const [form, setForm] = useState({ name: '', tagline: '', description: '', category: 'AI', website: '' })
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
@@ -84,7 +83,7 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
   const verified = Boolean(account?.email_verified_at)
   const subscriptionActive = subscriptionEligible(account)
   const eligible = verified && subscriptionActive
-  const activeBidCount = useMemo(() => workspace.products.filter((product) => product.bid_state === 'active').length, [workspace.products])
+  const activeBidCount = useMemo(() => workspace.products.filter((product) => (product.total_bid_credits ?? product.standing_bid ?? 0) > 0).length, [workspace.products])
 
   async function submitProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -128,25 +127,6 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
     }
   }
 
-  async function changeBid(productId: string, withdraw = false) {
-    if (!supabase) return
-    setError('')
-    setNotice('')
-    setSaving(true)
-    try {
-      const key = crypto.randomUUID()
-      const result = withdraw
-        ? await supabase.rpc('withdraw_standing_bid', { p_product_id: productId, p_idempotency_key: key })
-        : await supabase.rpc('place_or_update_bid', { p_product_id: productId, p_amount: Number(bidAmounts[productId]), p_idempotency_key: key })
-      if (result.error) throw result.error
-      setNotice(withdraw ? 'Standing bid withdrawn and its reservation released.' : 'Standing bid accepted. Credits reserved and rank recalculated.')
-      await load()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not update this standing bid.')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return <main className="founder-page">
     <div className="founder-title">
@@ -160,7 +140,7 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
       <div className="balance-grid">
         <section className="balance-card"><span>Available credits</span><strong>{wallet ? wallet.available.toLocaleString() : '—'}</strong><small>Ready for an eligible standing bid</small></section>
         <section className="balance-card"><span>Reserved for bids</span><strong>{wallet ? wallet.reserved.toLocaleString() : '—'}</strong><small>Reservations stay active until changed or withdrawn</small></section>
-        <section className="balance-card"><span>Your active bids</span><strong>{activeBidCount}</strong><small>Across approved founder listings</small></section>
+        <section className="balance-card"><span>Your boosted listings</span><strong>{activeBidCount}</strong><small>Across approved founder listings</small></section>
       </div>
       <div className="workspace-tabs">{['Your products', 'Credit activity', 'Referrals'].map((item) => <button key={item} className={tab === item ? 'current' : ''} onClick={() => setTab(item)}>{item}</button>)}</div>
       {tab === 'Your products' ? <section className="workspace-section">
@@ -177,11 +157,11 @@ export default function FounderWorkspace({ userId, email, onSignOut, onHow }: Pr
         </form>}
         {workspace.products.length ? <div className="founder-products">{workspace.products.map((product) => <article className="founder-product-card" key={product.id}>
           <div className="founder-product-main">{product.logo_url && <img className="founder-product-logo" src={product.logo_url} alt={`${product.name} logo`} />}<div><h3>{product.name}</h3><p>{product.tagline}</p><small>{product.category} · <a href={product.website_url} target="_blank" rel="noreferrer">{new URL(product.website_url).hostname}</a></small></div><span className={'state-pill state-' + product.state}>{prettyStatus(product.state)}</span></div>
-          <div className="founder-product-metrics"><span>Rank <strong>{product.current_rank ? '#' + product.current_rank : '—'}</strong></span><span>Standing bid <strong>{product.standing_bid ? product.standing_bid.toLocaleString() + ' credits' : 'No active bid'}</strong></span></div>
-          {product.state === 'approved' && eligible && <div className="bid-editor"><label>New standing bid (credits)<input type="number" min="1" step="1" value={bidAmounts[product.id] ?? (product.standing_bid ? String(product.standing_bid) : '')} onChange={(event) => setBidAmounts({ ...bidAmounts, [product.id]: event.target.value })} placeholder="Enter integer credits" /></label><button className="button button-primary" disabled={saving || !bidAmounts[product.id] || !Number.isSafeInteger(Number(bidAmounts[product.id])) || Number(bidAmounts[product.id]) <= 0} onClick={() => void changeBid(product.id)}>{product.standing_bid ? 'Update bid' : 'Place bid'}</button>{product.bid_state === 'active' && <button className="button button-light" disabled={saving} onClick={() => void changeBid(product.id, true)}>Withdraw</button>}</div>}
+          <div className="founder-product-metrics"><span>Rank <strong>{product.current_rank ? '#' + product.current_rank : '—'}</strong></span><span>Cumulative bid <strong>{(product.total_bid_credits ?? product.standing_bid ?? 0).toLocaleString()} credits</strong></span></div>
+          {product.state === 'approved' && eligible && <p className="listing-form-note">To add credits to this listing’s cumulative bid, open Discover and choose <strong>Boost listing</strong>. All approved catalog and founder listings use the same ranking.</p>}
         </article>)}</div> : <div className="workspace-empty"><span className="empty-emblem"><Compass size={22} /></span><h3>Your workspace starts here</h3><p>Your published listings and eligible standing bids will appear here.</p>{eligible && <button className="button button-primary" onClick={() => setShowForm(true)}><Plus size={14} /> Publish your first listing</button>}</div>}
       </section> : tab === 'Credit activity' ? <section className="workspace-section"><div className="section-header"><div><h2>Credit activity</h2><p>Recent ledger movements for your account.</p></div></div>{workspace.ledger.length ? <div className="ledger-list">{workspace.ledger.map((entry) => <article className="ledger-row" key={entry.id}><div><strong>{entry.reason}</strong><small>{prettyStatus(entry.source_type)} · {new Date(entry.created_at).toLocaleString()}</small></div><span className={entry.available_delta + entry.reserved_delta >= 0 ? '' : 'negative'}>{entry.available_delta > 0 ? '+' : ''}{entry.available_delta} available · {entry.reserved_delta > 0 ? '+' : ''}{entry.reserved_delta} reserved</span></article>)}</div> : <div className="workspace-empty compact"><h3>No credit movements yet</h3><p>Credit activity appears here after a verified credit event.</p></div>}</section> : <section className="workspace-section"><div className="section-header"><div><h2>Referrals</h2><p>Share your referral link. When a new founder signs up through it and completes a paid subscription, you earn bid credits based on your plan: Starter 5, Growth 50, Business 100.</p></div></div><div className="balance-grid referral-stats"><section className="balance-card"><span>Total referrals</span><strong>{referralStats.total}</strong><small>Attributed signups</small></section><section className="balance-card"><span>Pending</span><strong>{referralStats.pending}</strong><small>Awaiting qualifying paid subscription</small></section><section className="balance-card"><span>Credits earned</span><strong>{referralStats.credits.toLocaleString()}</strong><small>{referralStats.rewarded} rewarded referrals</small></section></div><div className="referral-code"><span>Your referral code</span><strong>{account?.referral_code ?? '—'}</strong><button className="button button-light" onClick={async () => { if (account?.referral_code) { const url = new URL(window.location.href); url.search = ''; url.hash = ''; url.searchParams.set('ref', account.referral_code); await navigator.clipboard.writeText(url.toString()); setNotice('Referral link copied. Share it with founders.') } }}>Copy referral link</button></div>{workspace.referrals.length ? <div className="ledger-list">{workspace.referrals.map((item) => <article className="ledger-row" key={item.id}><div><strong>{prettyStatus(item.state)}</strong><small>Started {new Date(item.attribution_at).toLocaleDateString()}</small></div><span>{item.reward_credits ? item.reward_credits.toLocaleString() + ' credits' : 'Not rewarded'}</span></article>)}</div> : <div className="workspace-empty compact"><h3>No referrals yet</h3><p>Your referred founders will be listed here after attribution.</p></div>}</section>}
     </>}
-    <div className="reservation-explainer"><div className="reservation-icon"><Check size={17} /></div><div><strong>Your bid is a reservation, not a purchase.</strong><span>Credits remain reserved while a standing bid is active. When you lower or withdraw a bid, the released amount returns to available credits after the database commits.</span></div><button onClick={onHow}>Read the rules <ArrowRight size={14} /></button></div>
+    <div className="reservation-explainer"><div className="reservation-icon"><Check size={17} /></div><div><strong>Boosts add to a listing’s cumulative bid total.</strong><span>Credits remain reserved while a standing bid is active. When you lower or withdraw a bid, the released amount returns to available credits after the database commits.</span></div><button onClick={onHow}>Read the rules <ArrowRight size={14} /></button></div>
   </main>
 }
