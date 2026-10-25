@@ -10,6 +10,7 @@ export const supabase = supabaseConfigured ? createClient(url!, anonKey!, {
 
 export type PublicLeaderboardRecord = {
   id: string
+  slug: string
   name: string
   tagline: string
   category: string
