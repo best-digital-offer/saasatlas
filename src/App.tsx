@@ -264,7 +264,7 @@ function App() {
 
           <section className="leaderboard-layout single-column" aria-label="SaaS leaderboard">
             <div className="results-column">
-              <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Standing bid</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
+              <div className="results-toolbar"><span>{products.length} products</span><label>Sort by <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Current rank</option><option value="credits">Cumulative credits</option><option value="name">Product name</option></select><ChevronDown size={13} /></label></div>
               <div className="table-head"><span>#</span><span>Product</span><span>Category</span><span>Cumulative bid</span><span aria-hidden="true"></span></div>
               {products.length ? products.slice(0, displayLimit).map((product) => {
                 const rank = rankById.get(product.id) ?? null
