@@ -27,6 +27,47 @@ create index if not exists leaderboard_credit_bids_catalog_idx
 alter table public.leaderboard_credit_bids enable row level security;
 revoke all on public.leaderboard_credit_bids from anon, authenticated;
 
+-- Preserve every existing active standing bid as the product's initial cumulative score.
+insert into public.leaderboard_credit_bids(owner_id, entry_type, product_id, catalog_product_id, amount, idempotency_key, created_at)
+select b.owner_id, 'founder', b.product_id, null, b.amount, gen_random_uuid(), b.accepted_at
+from public.standing_bids b
+where b.state = 'active';
+
+-- Convert the old reservation bucket into permanently spent boost credits without
+-- changing each account's available balance. The idempotency key prevents double conversion.
+with inserted_conversions as (
+  insert into public.credit_ledger(
+    owner_id, product_id, source_type, source_id, idempotency_key,
+    credit_amount, available_delta, reserved_delta, reason, audit_metadata
+  )
+  select b.owner_id, b.product_id, 'bid_spend',
+    'legacy-standing-bid:' || b.product_id::text,
+    'legacy-standing-bid-conversion:' || b.product_id::text,
+    b.amount, 0, -b.amount, 'Converted legacy standing bid into cumulative bid credits',
+    jsonb_build_object('conversion', 'bidrank_cumulative_credit', 'original_accepted_at', b.accepted_at)
+  from public.standing_bids b
+  where b.state = 'active'
+  on conflict (owner_id, idempotency_key) do nothing
+  returning owner_id, credit_amount
+), account_conversions as (
+  select owner_id, sum(credit_amount)::integer as converted_amount
+  from inserted_conversions
+  group by owner_id
+)
+update public.credit_accounts ca
+set reserved = greatest(0, ca.reserved - ac.converted_amount),
+    spent_total = ca.spent_total + ac.converted_amount,
+    updated_at = now()
+from account_conversions ac
+where ca.owner_id = ac.owner_id;
+
+update public.standing_bids
+set state = 'withdrawn', withdrawn_at = now(), last_withdrawn_at = now(), updated_at = now()
+where state = 'active';
+
+revoke execute on function public.place_or_update_bid(uuid, integer, uuid, integer) from public, anon, authenticated;
+revoke execute on function public.withdraw_standing_bid(uuid, uuid) from public, anon, authenticated;
+
 alter table public.credit_ledger drop constraint if exists credit_ledger_source_type_check;
 alter table public.credit_ledger add constraint credit_ledger_source_type_check
   check (source_type in ('purchase', 'referral', 'bid_reserve', 'bid_release', 'withdrawal', 'refund', 'chargeback', 'admin_adjustment', 'reconciliation', 'bid_spend'));
@@ -47,11 +88,11 @@ catalog_boosts as (
 founder_entries as (
   select
     p.id, p.slug, p.name, p.tagline, p.category, p.website_url,
-    b.amount as standing_bid,
+    null::integer as standing_bid,
     p.previous_rank, p.rank_changed_at,
     p.logo_url,
-    (coalesce(b.amount, 0)::bigint + coalesce(fb.boost_credits, 0)::bigint) as total_bid_credits,
-    coalesce(b.accepted_at, fb.first_boost_at) as first_bid_at,
+    coalesce(fb.boost_credits, 0)::bigint as total_bid_credits,
+    fb.first_boost_at as first_bid_at,
     p.created_at,
     'founder'::text as entry_type,
     null::text as source_provider,
@@ -66,7 +107,6 @@ founder_entries as (
     p.website_url as canonical_url,
     null::text as seo_path
   from public.products p
-  left join public.standing_bids b on b.product_id = p.id and b.state = 'active'
   left join founder_boosts fb on fb.product_id = p.id
   join public.user_accounts a on a.id = p.owner_id
   where p.state = 'approved' and p.participates
@@ -228,9 +268,7 @@ begin
     jsonb_build_object('entry_type', p_entry_type, 'entry_id', p_entry_id, 'entry_name', v_entry_name, 'added_credits', p_amount)
   );
 
-  if p_entry_type = 'founder' then
-    update public.products set previous_rank = current_rank where id = p_entry_id;
-  end if;
+  update public.products set previous_rank = current_rank where current_rank is not null;
 
   with fresh_ranks as materialized (
     select id, current_rank
