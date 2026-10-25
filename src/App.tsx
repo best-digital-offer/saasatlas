@@ -153,9 +153,8 @@ function App() {
   function getMinimumBoostForNextRank(product: Product) {
     const rank = product.currentRank ?? 999999
     const previous = liveProducts.find((candidate) => candidate.currentRank === rank - 1)
-    if (!product.credits || product.credits <= 0) return 5
     if (!previous) return 5
-    return Math.max(1, previous.credits - product.credits + 1)
+    return Math.max(product.credits > 0 ? 1 : 5, previous.credits - product.credits + 1)
   }
 
   function openProductBoost(product: Product) {
@@ -164,7 +163,7 @@ function App() {
     setBidError('')
     setBidNotice('')
     setBidTarget(product)
-    setBidInput(String(getMinimumBoostForNextRank(product)))
+    setBidInput(String(Math.max(product.credits > 0 ? 1 : 5, getMinimumBoostForNextRank(product))))
   }
 
   async function submitInlineBid() {
@@ -296,7 +295,7 @@ function App() {
       )}
 
       {selected && <ProductDialog product={selected} rank={rankById.get(selected.id) ?? null} onClose={() => setSelected(null)} onBid={() => { const target = selected; setSelected(null); openProductBoost(target) }} preview={dataState !== 'live'} />}
-      {bidTarget && <BoostDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentTotal={bidTarget.credits} leaderboard={allProducts} minimumAmount={getMinimumBoostForNextRank(bidTarget)} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
+      {bidTarget && <BoostDialog product={bidTarget} session={session} wallet={workspacePayload?.wallet ?? null} account={workspacePayload?.account ?? null} currentTotal={bidTarget.credits} leaderboard={allProducts} minimumAmount={bidTarget.credits > 0 ? 1 : 5} amount={bidInput} setAmount={setBidInput} submitting={bidSubmitting} error={bidError} notice={bidNotice} onClose={() => { setBidTarget(null); setBidError(''); setBidNotice('') }} onSubmit={submitInlineBid} onSignIn={() => { setBidTarget(null); setDialog('signin') }} />}
       {dialog === 'signin' ? <AuthDialog onClose={() => setDialog(null)} onSignedIn={() => { setDialog(null); setPage('founder') }} /> : dialog ? <InfoDialog type={dialog} onClose={() => setDialog(null)} onSignIn={() => setDialog('signin')} /> : null}
     </div>
   )
@@ -367,7 +366,9 @@ function BoostDialog({ product, session, wallet, account, currentTotal, leaderbo
     if (candidateTime !== productTime) return candidateTime < productTime
     const candidateCreated = candidate.createdAt ? new Date(candidate.createdAt).getTime() : 0
     const productCreated = product.createdAt ? new Date(product.createdAt).getTime() : 0
-    return candidateCreated !== productCreated ? candidateCreated < productCreated : candidate.id.localeCompare(product.id) < 0
+    if (candidateCreated !== productCreated) return candidateCreated < productCreated
+    if (Boolean(candidate.isCatalog) !== Boolean(product.isCatalog)) return !candidate.isCatalog
+    return candidate.id.replace(/^catalog-/, '').localeCompare(product.id.replace(/^catalog-/, '')) < 0
   }).length + 1
   const eligible = Boolean(account?.email_verified_at && ['active','trialing'].includes(account.subscription_status)
     && (!account.subscription_valid_until || new Date(account.subscription_valid_until).getTime() > Date.now()))
@@ -393,7 +394,7 @@ function BoostDialog({ product, session, wallet, account, currentTotal, leaderbo
         {session ? <>
           {!eligible && <div className="inline-bid-message error">Verified email and an eligible subscription are required for boosting.</div>}
           <div className="inline-bid-amount"><label htmlFor="inline-bid-amount">Credits to add</label><input id="inline-bid-amount" type="number" min={minimumAmount} step="1" value={amount} onChange={(event)=>setAmount(event.target.value)} /></div>
-          <p className="inline-bid-helper">This adds <strong>{Number.isSafeInteger(next) && next > 0 ? next.toLocaleString() : '0'} credits</strong> to {product.name}. Its cumulative total would become <strong>{projectedTotal.toLocaleString()} credits</strong>. Higher cumulative totals rank first; the position is recalculated after acceptance and may change when other people boost listings.</p>
+          <p className="inline-bid-helper">This adds <strong>{Number.isSafeInteger(next) && next > 0 ? next.toLocaleString() : '0'} credits</strong> to {product.name}. Its cumulative total would become <strong>{projectedTotal.toLocaleString()} credits</strong>. Suggested boost to pass the listing directly above: <strong>{minimumAmount.toLocaleString()} credits</strong>. You can add a smaller amount; your final position follows the new cumulative total and can change when others boost listings.</p>
           <div className="standing-bid-duration"><strong>How ranking works</strong><p>Every eligible listing—including the 300 catalog products—uses the same leaderboard. Each accepted boost adds to that listing’s cumulative total; higher totals move above lower totals. The system does not promise a fixed position based on which row you click.</p><p><strong>Referral-earned credits can be used</strong> as long as they are available in your wallet and your account is eligible to bid.</p></div>
         </> : <p className="inline-bid-signin">Sign in to use available credits to boost this listing.</p>}
         {error && <div className="inline-bid-message error" role="alert">{error}</div>}
